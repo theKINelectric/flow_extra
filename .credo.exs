@@ -57,7 +57,13 @@
 
         # For some checks, like AliasUsage, you can only customize the priority
         # Priority values are: `low, normal, high, higher`
-        {Credo.Check.Design.AliasUsage, priority: :low},
+        #
+        # FlowEx: AliasUsage is disabled by documented decision. The library's
+        # core is macro-generated (Flowex.Pipeline __using__/__before_compile__,
+        # Flowex.Sync.Pipeline); aliasing module references inside `quote`
+        # blocks leaks the alias into every user module's namespace — worse
+        # hygiene than the fully-qualified form the check suggests.
+        {Credo.Check.Design.AliasUsage, false},
 
         # For others you can set parameters
 
