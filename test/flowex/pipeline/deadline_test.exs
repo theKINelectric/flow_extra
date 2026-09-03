@@ -33,9 +33,7 @@ defmodule Flowex.Pipeline.DeadlineTest do
   test "the sync track dies when the deadline passes" do
     pipeline = DeadlinePipelineSync.start()
 
-    assert catch_exit(
-              DeadlinePipelineSync.call(pipeline, %DeadlinePipelineSync{number: 1}, 50)
-            )
+    assert catch_exit(DeadlinePipelineSync.call(pipeline, %DeadlinePipelineSync{number: 1}, 50))
   end
 
   test "the client honors a deadline" do
