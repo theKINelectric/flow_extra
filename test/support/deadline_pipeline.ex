@@ -3,7 +3,7 @@ defmodule DeadlinePipeline do
 
   defstruct [:number]
 
-  pipe :sleep_500, count: 2
+  pipe(:sleep_500, count: 2)
 
   def sleep_500(struct, _opts) do
     :timer.sleep(500)
@@ -16,7 +16,7 @@ defmodule DeadlinePipelineSync do
 
   defstruct [:number]
 
-  pipe :sleep_500, count: 2
+  pipe(:sleep_500, count: 2)
 
   def sleep_500(struct, _opts) do
     :timer.sleep(500)

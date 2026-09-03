@@ -3,7 +3,7 @@ defmodule CountCapPipeline do
 
   defstruct [:number]
 
-  pipe :id, count: 101
+  pipe(:id, count: 101)
 
   def id(struct, _opts), do: struct
 end
@@ -21,7 +21,7 @@ defmodule BadModuleInitPipeline do
 
   defstruct [:number]
 
-  pipe BadInitModule, count: 1
+  pipe(BadInitModule, count: 1)
 end
 
 defmodule BadModuleInitPipelineSync do
@@ -29,7 +29,7 @@ defmodule BadModuleInitPipelineSync do
 
   defstruct [:number]
 
-  pipe BadInitModule, count: 1
+  pipe(BadInitModule, count: 1)
 end
 
 defmodule BadPipelineInitPipeline do
@@ -37,7 +37,7 @@ defmodule BadPipelineInitPipeline do
 
   defstruct [:number]
 
-  pipe :id, count: 1
+  pipe(:id, count: 1)
 
   def init(_opts), do: :garbage
 
@@ -49,7 +49,7 @@ defmodule BadPipelineInitPipelineSync do
 
   defstruct [:number]
 
-  pipe :id, count: 1
+  pipe(:id, count: 1)
 
   def init(_opts), do: :garbage
 
