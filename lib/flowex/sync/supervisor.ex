@@ -11,9 +11,12 @@ defmodule Flowex.Sync.Supervisor do
     name = Flowex.Names.via(pipeline_module, ref, :sync_gen_server)
 
     children = [
-      worker(Flowex.Sync.GenServer, [{pipeline_module, opts}, [name: name]], id: name)
+      %{
+        id: name,
+        start: {Flowex.Sync.GenServer, :start_link, [{pipeline_module, opts}, [name: name]]}
+      }
     ]
 
-    supervise(children, strategy: :one_for_one)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end

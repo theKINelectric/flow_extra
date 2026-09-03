@@ -27,15 +27,15 @@ defmodule Flowex.Sync.Pipeline do
       end
 
       def supervised_start(pid, opts \\ %{}) do
-        import Supervisor.Spec
         ref = make_ref()
         name = supervisor_name(__MODULE__, ref)
 
-        sup_spec =
-          supervisor(Flowex.Sync.Supervisor, [__MODULE__, ref, name, opts],
-            id: name,
-            restart: :permanent
-          )
+        sup_spec = %{
+          id: name,
+          start: {Flowex.Sync.Supervisor, :start_link, [__MODULE__, ref, name, opts]},
+          restart: :permanent,
+          type: :supervisor
+        }
 
         {:ok, sup_pid} = Supervisor.start_child(pid, sup_spec)
         do_start(sup_pid, name)
