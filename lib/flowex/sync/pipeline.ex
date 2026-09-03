@@ -16,25 +16,23 @@ defmodule Flowex.Sync.Pipeline do
 
       def start(opts \\ %{}) do
         opts = init(opts)
-        name = supervisor_name()
-        {:ok, sup_pid} = Flowex.Sync.Supervisor.start_link(__MODULE__, name, opts)
+        ref = make_ref()
+        name = supervisor_name(__MODULE__, ref)
+        {:ok, sup_pid} = Flowex.Sync.Supervisor.start_link(__MODULE__, ref, name, opts)
         do_start(sup_pid, name)
       end
 
-      def stop(%Flowex.Pipeline{sup_name: sup_name}) do
-        Enum.each(Supervisor.which_children(sup_name), fn {id, _pid, :worker, [_]} ->
-          Supervisor.terminate_child(sup_name, id)
-        end)
-
-        Supervisor.stop(sup_name)
+      def stop(pipeline) do
+        Flowex.Names.stop_pipeline(pipeline)
       end
 
       def supervised_start(pid, opts \\ %{}) do
         import Supervisor.Spec
-        name = supervisor_name()
+        ref = make_ref()
+        name = supervisor_name(__MODULE__, ref)
 
         sup_spec =
-          supervisor(Flowex.Sync.Supervisor, [__MODULE__, name, opts],
+          supervisor(Flowex.Sync.Supervisor, [__MODULE__, ref, name, opts],
             id: name,
             restart: :permanent
           )
@@ -55,8 +53,8 @@ defmodule Flowex.Sync.Pipeline do
         }
       end
 
-      defp supervisor_name do
-        String.to_atom("Flowex.Sync.Supervisor_#{inspect(__MODULE__)}_#{inspect(make_ref())}")
+      defp supervisor_name(pipeline_module, ref) do
+        Flowex.Names.via(pipeline_module, ref, :sync_supervisor)
       end
 
       def handle_error(error, _struct, _opts) do

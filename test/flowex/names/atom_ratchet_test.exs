@@ -13,6 +13,17 @@ defmodule Flowex.Names.AtomRatchetTest do
      serve interleaved — the key uniqueness must hold across instances.
   """
 
+  # One-time lazy module loading interns atoms (a beam module's atoms are
+  # created when it first loads, not per cycle) — warm both tracks up before
+  # measuring so the pin targets the per-cycle ratchet and nothing else.
+  setup do
+    pipeline = MailboxPipeline.start(%{})
+    MailboxPipeline.stop(pipeline)
+    pipeline = SyncErrorTrackPipeline.start(%{})
+    SyncErrorTrackPipeline.stop(pipeline)
+    :ok
+  end
+
   test "50 parallel start/stop cycles do not ratchet the atom table" do
     before = :erlang.system_info(:atom_count)
 
@@ -36,6 +47,7 @@ defmodule Flowex.Names.AtomRatchetTest do
     end
 
     delta = :erlang.system_info(:atom_count) - before
+
     assert delta <= 1,
            "atom table grew by #{delta} over 50 sync start/stop cycles (allowance 1)"
   end

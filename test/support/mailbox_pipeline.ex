@@ -8,7 +8,7 @@ defmodule MailboxPipeline do
 
   defstruct [:number]
 
-  pipe :do_nothing, count: 1
+  pipe(:do_nothing, count: 1)
 
   def do_nothing(struct, _opts), do: struct
 end

@@ -8,8 +8,8 @@ defmodule SyncErrorTrackPipeline do
 
   defstruct [:number, :caught_error]
 
-  pipe :boom, count: 1
-  error_pipe :catch_it, count: 1
+  pipe(:boom, count: 1)
+  error_pipe(:catch_it, count: 1)
 
   def boom(_struct, _opts), do: raise(RuntimeError, message: "boom")
 
