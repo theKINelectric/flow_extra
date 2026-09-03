@@ -2,6 +2,14 @@
 [![Build Status](https://travis-ci.org/antonmi/flowex.svg?branch=master)](https://travis-ci.org/antonmi/flowex)
 [![Hex.pm](https://img.shields.io/hexpm/v/flowex.svg?style=flat-square)](https://hex.pm/packages/flowex)
 
+## Fork notice
+
+This is a vendored, factory-maintained fork of [antonmi/flowex](https://github.com/antonmi/flowex),
+revived by the Factory on Elixir 1.20/OTP 29. Lineage: `antonmi/flowex @ 3a9ebae`;
+fork point: `3ccf92e`. The author's MIT LICENSE is kept. Upstream declared the
+project unsupported (see ALF); development continues here as the Factory's
+Railway backbone.
+
 ## Railway Flow-Based Programming.
 ## The library is not supported anymore, see the [ALF](https://github.com/antonmi/alf) project.
 #### Flowex is a set of abstractions built on top Elixir GenStage which allows writing program with [Flow-Based Programming](https://en.wikipedia.org/wiki/Flow-based_programming) paradigm.
