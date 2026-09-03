@@ -1,19 +1,24 @@
 defmodule Flowex.Sync.GenServer do
+  @moduledoc "Sync pipeline runner: one process, the line walked in a call."
+
   use GenServer
 
   def start_link(state, opts \\ []) do
     GenServer.start_link(__MODULE__, state, opts)
   end
 
+  @impl true
   def init(opts) do
     {:ok, opts}
   end
 
+  @impl true
   def handle_call(ip, _from, {pipeline_module, opts}) do
     result = do_call(ip, {pipeline_module, opts})
     {:reply, result, {pipeline_module, opts}}
   end
 
+  @impl true
   def handle_cast(ip, {pipeline_module, opts}) do
     do_call(ip, {pipeline_module, opts})
     {:noreply, {pipeline_module, opts}}
@@ -71,7 +76,7 @@ defmodule Flowex.Sync.GenServer do
       case Atom.to_charlist(atom) do
         ~c"Elixir." ++ _ ->
           pipe_opts = atom.init(pipe_opts)
-          apply(atom, :call, [ip.error, ip.struct, pipe_opts])
+          atom.call(ip.error, ip.struct, pipe_opts)
 
         _ ->
           apply(pipeline_module, atom, [ip.error, ip.struct, pipe_opts])

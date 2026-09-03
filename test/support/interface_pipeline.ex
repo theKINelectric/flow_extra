@@ -2,9 +2,9 @@ defmodule InterfacePipeline do
   use Flowex.Pipeline
   defstruct [:x, :y, :a, :b, :foo, :p, :q, :ok, :z]
 
-  pipe C1
-  pipe C2
-  pipe :c3
+  pipe(C1)
+  pipe(C2)
+  pipe(:c3)
 
   def c3(%{foo: foo, x: x, y: y}, _opts) do
     %{p: "#{foo} - #{x}", q: y}
@@ -37,9 +37,9 @@ defmodule DataAvailable do
 
   defstruct [:top, :c1, :foo]
 
-  pipe Component1
-  pipe :component2
-  pipe Component3
+  pipe(Component1)
+  pipe(:component2)
+  pipe(Component3)
 
   def component2(%__MODULE__{top: top}, _opts) do
     %{top: top + 2, c3: 2}

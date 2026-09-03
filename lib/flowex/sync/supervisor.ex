@@ -7,6 +7,7 @@ defmodule Flowex.Sync.Supervisor do
     Supervisor.start_link(__MODULE__, [pipeline_module, ref, opts], name: name)
   end
 
+  @impl true
   def init([pipeline_module, ref, opts]) do
     name = Flowex.Names.via(pipeline_module, ref, :sync_gen_server)
 

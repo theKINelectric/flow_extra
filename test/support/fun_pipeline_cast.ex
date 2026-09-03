@@ -1,10 +1,10 @@
 defmodule FunPipelineCast do
   use Flowex.Pipeline
 
-  pipe :add_one
-  pipe :mult_by_two
-  pipe :minus_three
-  pipe :print_result
+  pipe(:add_one)
+  pipe(:mult_by_two)
+  pipe(:minus_three)
+  pipe(:print_result)
 
   defstruct number: nil, pid: nil
 

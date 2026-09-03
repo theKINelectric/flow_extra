@@ -64,17 +64,27 @@ defmodule Flowex.Pipeline do
     end
   end
 
+  @doc """
+  Resolves the consumer through the registry and monitors it. Used by the
+  generated `call/2` — kept here so the macro's generated code stays lean.
+  """
+  @spec monitor_consumer!(term(), Flowex.Pipeline.t()) :: reference()
+  def monitor_consumer!(out_name, pipeline) do
+    case GenServer.whereis(out_name) do
+      nil -> raise Flowex.PipelineError, pipeline: pipeline, message: :noprocess
+      pid -> Process.monitor(pid)
+    end
+  end
+
   defmacro __before_compile__(_env) do
     quote do
       def pipes, do: Enum.reverse(@pipes)
       def error_pipe, do: @error_pipe
 
       def pipe_info(name) do
-        if pipe = Enum.find(pipes(), &(elem(&1, 0) == name)) do
-          %{name: elem(pipe, 0), count: elem(pipe, 1), opts: elem(pipe, 2), type: elem(pipe, 3)}
-        else
-          nil
-        end
+        Enum.find_value(pipes(), fn {atom, count, opts, type} ->
+          atom == name && %{name: atom, count: count, opts: opts, type: type}
+        end)
       end
 
       def call(
@@ -85,14 +95,7 @@ defmodule Flowex.Pipeline do
         # :erlang.monitor takes pids or local atoms only — no via — so the
         # consumer name is resolved through the registry first. A nil lookup
         # raises immediately, matching what a monitor on a dead name would do.
-        monitor_ref =
-          case GenServer.whereis(out_name) do
-            nil ->
-              raise Flowex.PipelineError, pipeline: pipeline, message: :noprocess
-
-            consumer_pid ->
-              Process.monitor(consumer_pid)
-          end
+        monitor_ref = Flowex.Pipeline.monitor_consumer!(out_name, pipeline)
 
         ip_ref = make_ref()
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid, ref: ip_ref}

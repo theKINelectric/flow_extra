@@ -3,18 +3,18 @@ defmodule ModulePipeline do
 
   defstruct [:number, :a, :b, :c]
 
-  pipe AddOne, count: 1
-  pipe MultByTwo, count: 3
-  pipe :do_nothing, count: 2
-  pipe MinusThree, count: 2
-  error_pipe IfError, count: 3
+  pipe(AddOne, count: 1)
+  pipe(MultByTwo, count: 3)
+  pipe(:do_nothing, count: 2)
+  pipe(MinusThree, count: 2)
+  error_pipe(IfError, count: 3)
 
   def do_nothing(struct, _opts) do
     struct
   end
 end
 
-#pipes
+# pipes
 defmodule AddOne do
   defstruct [:number]
 

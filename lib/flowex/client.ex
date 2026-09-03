@@ -36,11 +36,13 @@ defmodule Flowex.Client do
     result
   end
 
+  @impl true
   def handle_call({:call, struct}, _pid, pipeline) do
     struct = pipeline.module.call(pipeline, struct)
     {:reply, struct, pipeline}
   end
 
+  @impl true
   def handle_cast({:cast, struct}, pipeline) do
     pipeline.module.cast(pipeline, struct)
     {:noreply, pipeline}
