@@ -1,6 +1,12 @@
 defmodule Flowex.PipelineBuilder do
   @moduledoc "Defines functions to start and to stop a pipeline"
 
+  # Admission ceiling: a pipe's `count` is per-pipeline-process replication —
+  # a runaway count builds runaway topology before any data flows. 100 gives
+  # the documented use (count: 10) two orders of headroom and still refuses
+  # the typos (count: 1000) loudly.
+  @max_count 100
+
   @spec start(module(), map()) :: Flowex.Pipeline.t()
   def start(pipeline_module, opts) do
     {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
@@ -29,6 +35,8 @@ defmodule Flowex.PipelineBuilder do
   end
 
   defp build_children(pipeline_module, opts) do
+    Flowex.Pipeline.validate_opts!(pipeline_module, opts)
+
     ref = make_ref()
     producer_name = producer_name(pipeline_module, ref)
 
@@ -85,12 +93,13 @@ defmodule Flowex.PipelineBuilder do
   end
 
   defp validate_count!(pipeline_module, atom, count) do
-    if is_integer(count) and count >= 1 do
+    if is_integer(count) and count >= 1 and count <= @max_count do
       count
     else
       raise ArgumentError,
             "pipe #{inspect(atom)} in pipeline #{inspect(pipeline_module)} " <>
-              "declared with count #{inspect(count)} — count must be a positive integer"
+              "declared with count #{inspect(count)} — count must be a positive integer " <>
+              "no greater than #{@max_count}"
     end
   end
 
@@ -119,6 +128,8 @@ defmodule Flowex.PipelineBuilder do
 
   defp init_module_pipe({type, pipeline_module, ref, module, opts}, prev_names) do
     opts = module.init(opts)
+    Flowex.Pipeline.validate_module_init!(module, opts)
+
     name = Flowex.Names.via(pipeline_module, ref, {:module_stage, make_ref()})
 
     opts = %Flowex.StageOpts{

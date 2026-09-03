@@ -4,6 +4,9 @@ defmodule Flowex.Sync.Supervisor do
   use Supervisor
 
   def start_link(pipeline_module, ref, name, opts) do
+    # Admission before the supervisor spawns, so a bad init/1 result is
+    # refused at start — not discovered on the first call, far from the cause.
+    Flowex.Pipeline.validate_opts!(pipeline_module, opts)
     Supervisor.start_link(__MODULE__, [pipeline_module, ref, opts], name: name)
   end
 

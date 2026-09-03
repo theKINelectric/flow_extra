@@ -76,6 +76,37 @@ defmodule Flowex.Pipeline do
     end
   end
 
+  @doc """
+  Validates pipeline-level `init/1` output at admission: whatever init
+  returns must be a map or keyword list — the forms the pipe walker can turn
+  into pipe options. Shared by both engines so the refusal is loud, early,
+  and names the culprit.
+  """
+  @spec validate_opts!(module(), term()) :: map() | keyword()
+  def validate_opts!(pipeline_module, opts) do
+    if is_map(opts) or Keyword.keyword?(opts) do
+      opts
+    else
+      raise ArgumentError,
+            "#{inspect(pipeline_module)}.init/1 must return a map or keyword list, " <>
+              "got: #{inspect(opts)}"
+    end
+  end
+
+  @doc """
+  Validates module-pipe `init/1` output: a module pipe's options must be a
+  map by the time they reach a stage or the sync walker.
+  """
+  @spec validate_module_init!(module(), term()) :: :ok
+  def validate_module_init!(module, opts) do
+    unless is_map(opts) do
+      raise ArgumentError,
+            "#{inspect(module)}.init/1 must return a map, got: #{inspect(opts)}"
+    end
+
+    :ok
+  end
+
   defmacro __before_compile__(_env) do
     quote do
       def pipes, do: Enum.reverse(@pipes)

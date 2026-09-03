@@ -65,6 +65,7 @@ defmodule Flowex.Sync.GenServer do
     case Atom.to_charlist(atom) do
       ~c"Elixir." ++ _ ->
         pipe_opts = atom.init(pipe_opts)
+        Flowex.Pipeline.validate_module_init!(atom, pipe_opts)
         try_apply(ip, {atom, :call, pipe_opts})
 
       _ ->
@@ -79,6 +80,7 @@ defmodule Flowex.Sync.GenServer do
       case Atom.to_charlist(atom) do
         ~c"Elixir." ++ _ ->
           pipe_opts = atom.init(pipe_opts)
+          Flowex.Pipeline.validate_module_init!(atom, pipe_opts)
           struct = struct(atom, ip.struct)
           atom.call(ip.error, struct, pipe_opts)
 
