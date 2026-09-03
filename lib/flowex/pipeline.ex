@@ -75,24 +75,22 @@ defmodule Flowex.Pipeline do
             struct = %__MODULE__{}
           ) do
         pid = self()
-        ref = Process.monitor(out_name)
-        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid}
+        monitor_ref = Process.monitor(out_name)
+        ip_ref = make_ref()
+        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid, ref: ip_ref}
 
         GenServer.cast(out_name, {in_name, ip})
-        wait_response(pid, ref, pipeline)
+        wait_response(pid, monitor_ref, ip_ref, pipeline)
       end
 
-      defp wait_response(pid, ref, pipeline) do
+      defp wait_response(pid, monitor_ref, ip_ref, pipeline) do
         receive do
-          %Flowex.IP{requester: ^pid} = ip ->
-            Process.demonitor(ref)
+          %Flowex.IP{requester: ^pid, ref: ^ip_ref} = ip ->
+            Process.demonitor(monitor_ref)
             struct(%__MODULE__{}, ip.struct)
 
-          {:DOWN, ^ref, _, _, reason} ->
+          {:DOWN, ^monitor_ref, _, _, reason} ->
             raise Flowex.PipelineError, pipeline: pipeline, message: reason
-
-          smth ->
-            wait_response(pid, ref, pipeline)
         end
       end
 
