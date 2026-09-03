@@ -27,11 +27,11 @@ defmodule ParityPipeline do
 
   defstruct [:number, :mark]
 
-  pipe ParityAddOne, count: 2
-  pipe :set_mark, count: 1
-  error_pipe ParityErrorPipe, count: 2
+  pipe(ParityAddOne, count: 2)
+  pipe(:set_mark, count: 1)
+  error_pipe(ParityErrorPipe, count: 2)
 
-  def set_mark(struct, _opts), do: %{mark: :set}
+  def set_mark(_struct, _opts), do: %{mark: :set}
 end
 
 defmodule ParityPipelineSync do
@@ -39,11 +39,11 @@ defmodule ParityPipelineSync do
 
   defstruct [:number, :mark]
 
-  pipe ParityAddOne, count: 2
-  pipe :set_mark, count: 1
-  error_pipe ParityErrorPipe, count: 2
+  pipe(ParityAddOne, count: 2)
+  pipe(:set_mark, count: 1)
+  error_pipe(ParityErrorPipe, count: 2)
 
-  def set_mark(struct, _opts), do: %{mark: :set}
+  def set_mark(_struct, _opts), do: %{mark: :set}
 end
 
 defmodule ErrorParityPipeline do
@@ -51,8 +51,8 @@ defmodule ErrorParityPipeline do
 
   defstruct [:number, :mark]
 
-  pipe :boom, count: 1
-  error_pipe ParityErrorPipe, count: 2
+  pipe(:boom, count: 1)
+  error_pipe(ParityErrorPipe, count: 2)
 
   def boom(_struct, _opts), do: raise(ArgumentError, "boom")
 end
@@ -62,8 +62,8 @@ defmodule ErrorParityPipelineSync do
 
   defstruct [:number, :mark]
 
-  pipe :boom, count: 1
-  error_pipe ParityErrorPipe, count: 2
+  pipe(:boom, count: 1)
+  error_pipe(ParityErrorPipe, count: 2)
 
   def boom(_struct, _opts), do: raise(ArgumentError, "boom")
 end

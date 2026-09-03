@@ -32,7 +32,10 @@ defmodule Flowex.Sync.GenServer do
   end
 
   defp try_apply(ip, {module, function, pipe_opts}) do
-    result = apply(module, function, [ip.struct, pipe_opts])
+    # The cast law (engine parity with Flowex.Stage): every module sees its
+    # own struct at the pipe boundary, never the accumulated raw map.
+    struct = struct(module, ip.struct)
+    result = apply(module, function, [struct, pipe_opts])
     %{ip | struct: Map.merge(ip.struct, Map.delete(result, :__struct__))}
   rescue
     error ->
@@ -50,7 +53,7 @@ defmodule Flowex.Sync.GenServer do
     {atom, _count, pipe_opts, type} = pipe
 
     if ip.error do
-      do_preocess_error(ip, pipeline_module, atom, {opts, pipe_opts}, type)
+      do_process_error(ip, pipeline_module, atom, {opts, pipe_opts}, type)
     else
       do_process(ip, pipeline_module, atom, {opts, pipe_opts})
     end
@@ -69,21 +72,23 @@ defmodule Flowex.Sync.GenServer do
     end
   end
 
-  defp do_preocess_error(ip, pipeline_module, atom, {opts, pipe_opts}, :error_pipe) do
+  defp do_process_error(ip, pipeline_module, atom, {opts, pipe_opts}, :error_pipe) do
     pipe_opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
 
     result =
       case Atom.to_charlist(atom) do
         ~c"Elixir." ++ _ ->
           pipe_opts = atom.init(pipe_opts)
-          atom.call(ip.error, ip.struct, pipe_opts)
+          struct = struct(atom, ip.struct)
+          atom.call(ip.error, struct, pipe_opts)
 
         _ ->
-          apply(pipeline_module, atom, [ip.error, ip.struct, pipe_opts])
+          struct = struct(pipeline_module, ip.struct)
+          apply(pipeline_module, atom, [ip.error, struct, pipe_opts])
       end
 
-    %{ip | struct: Map.merge(ip.struct, result)}
+    %{ip | struct: Map.merge(ip.struct, Map.delete(result, :__struct__))}
   end
 
-  defp do_preocess_error(ip, _pipeline_module, _atom, _opts, :pipe), do: ip
+  defp do_process_error(ip, _pipeline_module, _atom, _opts, :pipe), do: ip
 end
