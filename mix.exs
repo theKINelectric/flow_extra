@@ -5,8 +5,9 @@ defmodule Flowex.Mixfile do
     [
       app: :flowex,
       version: "0.5.4",
-      elixir: ">= 1.3.0",
-      build_embedded: Mix.env() == :prod,
+      # Honest floor: every dep in every env resolves on 1.15+ (ex_doc is the
+      # binding constraint; gen_stage needs ~> 1.11, credo >= 1.13).
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
