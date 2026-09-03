@@ -32,6 +32,7 @@ defmodule Flowex.Mixfile do
       {:gen_stage, "~> 1.0"},
       {:espec, "~> 1.8", only: :test},
       {:credo, "~> 1.4", only: [:dev, :test]},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       # Docs
       {:earmark, "~> 1.4", only: [:docs, :dev]},
       {:ex_doc, "~> 0.22", only: [:docs, :dev]}
