@@ -1,5 +1,5 @@
 defmodule Flowex.Sync.Supervisor do
-  @moduledoc "Sync pipeline supevisor"
+  @moduledoc "Sync pipeline supervisor"
 
   use Supervisor
 

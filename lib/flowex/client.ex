@@ -1,5 +1,5 @@
 defmodule Flowex.Client do
-  @moduledoc "Absctraction to call the pipeline"
+  @moduledoc "Abstraction to call the pipeline"
 
   use GenServer
 
