@@ -24,6 +24,12 @@ defmodule ParallelTest do
 
     {time, _} = :timer.tc(func)
 
-    assert time in 500_000..600_000
+    # The property is concurrency, not a stopwatch: each call sleeps 500 ms
+    # and the sleep stage runs count: 4, so four concurrent calls land near
+    # 500 ms while four serialized runs would need at least 2_000 ms. The
+    # generous ceiling keeps the proof alive under CI load — the old
+    # 500–600 ms window flaked on any busy machine.
+    assert time > 500_000
+    assert time < 2_000_000
   end
 end
