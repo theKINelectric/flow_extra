@@ -120,7 +120,8 @@ defmodule Flowex.Pipeline do
 
       def call(
             pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
-            struct = %__MODULE__{}
+            struct = %__MODULE__{},
+            timeout \\ 5_000
           ) do
         pid = self()
         # :erlang.monitor takes pids or local atoms only — no via — so the
@@ -132,17 +133,26 @@ defmodule Flowex.Pipeline do
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid, ref: ip_ref}
 
         GenServer.cast(out_name, {in_name, ip})
-        wait_response(pid, monitor_ref, ip_ref, pipeline)
+        wait_response(pid, monitor_ref, ip_ref, pipeline, timeout)
       end
 
-      defp wait_response(pid, monitor_ref, ip_ref, pipeline) do
+      # The two ways a call ends, and both are the caller's liveness contract:
+      # the pipeline answers, or the crash cascade does (a stage dies, the
+      # rest_for_one supervisor tears the line down, the consumer's death
+      # trips the monitor below). A slow-but-alive pipeline ends neither way —
+      # the deadline is the third ending, so no caller waits forever.
+      defp wait_response(pid, monitor_ref, ip_ref, pipeline, timeout) do
         receive do
           %Flowex.IP{requester: ^pid, ref: ^ip_ref} = ip ->
-            Process.demonitor(monitor_ref)
+            Process.demonitor(monitor_ref, [:flush])
             struct(%__MODULE__{}, ip.struct)
 
           {:DOWN, ^monitor_ref, _, _, reason} ->
             raise Flowex.PipelineError, pipeline: pipeline, message: reason
+        after
+          timeout ->
+            Process.demonitor(monitor_ref, [:flush])
+            raise Flowex.PipelineError, pipeline: pipeline, message: :timeout
         end
       end
 
@@ -150,7 +160,7 @@ defmodule Flowex.Pipeline do
             pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
             struct = %__MODULE__{}
           ) do
-        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: false}
+        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: nil}
         GenServer.cast(out_name, {in_name, ip})
       end
     end

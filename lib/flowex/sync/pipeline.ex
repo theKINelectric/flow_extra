@@ -76,10 +76,11 @@ defmodule Flowex.Sync.Pipeline do
 
       def call(
             pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
-            struct = %__MODULE__{}
+            struct = %__MODULE__{},
+            timeout \\ 5_000
           ) do
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__)}
-        ip = GenServer.call(in_name, ip, :infinity)
+        ip = GenServer.call(in_name, ip, timeout)
         struct(%__MODULE__{}, ip.struct)
       end
 
