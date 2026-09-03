@@ -33,7 +33,6 @@ defmodule Flowex.Mixfile do
       {:credo, "~> 1.4", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       # Docs
-      {:earmark, "~> 1.4", only: [:docs, :dev]},
       {:ex_doc, "~> 0.22", only: [:docs, :dev]}
     ]
   end
