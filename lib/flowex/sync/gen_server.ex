@@ -32,6 +32,7 @@ defmodule Flowex.Sync.GenServer do
   rescue
     error ->
       error_struct = %Flowex.PipeError{
+        error: error,
         message: Exception.message(error),
         pipe: {module, function, pipe_opts},
         struct: ip.struct
