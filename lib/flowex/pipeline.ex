@@ -45,8 +45,8 @@ defmodule Flowex.Pipeline do
         PipelineBuilder.supervised_start(__MODULE__, pid, opts)
       end
 
-      def stop(%Flowex.Pipeline{sup_name: sup_name}) do
-        PipelineBuilder.stop(sup_name)
+      def stop(pipeline) do
+        Flowex.Names.stop_pipeline(pipeline)
       end
 
       def handle_error(error, _struct, _opts) do
@@ -75,7 +75,18 @@ defmodule Flowex.Pipeline do
             struct = %__MODULE__{}
           ) do
         pid = self()
-        monitor_ref = Process.monitor(out_name)
+        # :erlang.monitor takes pids or local atoms only — no via — so the
+        # consumer name is resolved through the registry first. A nil lookup
+        # raises immediately, matching what a monitor on a dead name would do.
+        monitor_ref =
+          case GenServer.whereis(out_name) do
+            nil ->
+              raise Flowex.PipelineError, pipeline: pipeline, message: :noprocess
+
+            consumer_pid ->
+              Process.monitor(consumer_pid)
+          end
+
         ip_ref = make_ref()
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid, ref: ip_ref}
 

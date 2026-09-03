@@ -4,18 +4,18 @@ defmodule Flowex.PipelineBuilder do
   import Supervisor.Spec
 
   def start(pipeline_module, opts) do
-    {producer_name, consumer_name, all_specs} = build_children(pipeline_module, opts)
+    {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
 
-    sup_name = supervisor_name(pipeline_module)
+    sup_name = supervisor_name(pipeline_module, ref)
     {:ok, _sup_pid} = Flowex.Supervisor.start_link(all_specs, sup_name)
 
     pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
   end
 
   def supervised_start(pipeline_module, pid, opts) do
-    {producer_name, consumer_name, all_specs} = build_children(pipeline_module, opts)
+    {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
 
-    sup_name = supervisor_name(pipeline_module)
+    sup_name = supervisor_name(pipeline_module, ref)
 
     sup_spec =
       supervisor(Flowex.Supervisor, [all_specs, sup_name], id: sup_name, restart: :permanent)
@@ -24,39 +24,27 @@ defmodule Flowex.PipelineBuilder do
     pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
   end
 
-  def stop(sup_name) do
-    Enum.each(Supervisor.which_children(sup_name), fn {id, _pid, :worker, [_]} ->
-      Supervisor.terminate_child(sup_name, id)
-    end)
-
-    Supervisor.stop(sup_name)
-  end
-
   defp build_children(pipeline_module, opts) do
-    producer_name = producer_name(pipeline_module)
+    ref = make_ref()
+    producer_name = producer_name(pipeline_module, ref)
     producer_spec = worker(Flowex.Producer, [nil, [name: producer_name]], id: producer_name)
 
-    {wss, last_names} = init_pipes({producer_spec, producer_name}, {pipeline_module, opts})
+    {wss, last_names} = init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts})
 
-    consumer_name = consumer_name(pipeline_module)
+    consumer_name = consumer_name(pipeline_module, ref)
 
     consumer_worker_spec =
       worker(Flowex.Consumer, [last_names, [name: consumer_name]], id: consumer_name)
 
-    {producer_name, consumer_name, wss ++ [consumer_worker_spec]}
+    {producer_name, consumer_name, wss ++ [consumer_worker_spec], ref}
   end
 
-  defp supervisor_name(pipeline_module) do
-    String.to_atom("Flowex.Supervisor_#{inspect(pipeline_module)}_#{inspect(make_ref())}")
-  end
+  defp supervisor_name(pipeline_module, ref),
+    do: Flowex.Names.via(pipeline_module, ref, :supervisor)
 
-  defp producer_name(pipeline_module) do
-    String.to_atom("Flowex.Producer_#{inspect(pipeline_module)}_#{inspect(make_ref())}")
-  end
+  defp producer_name(pipeline_module, ref), do: Flowex.Names.via(pipeline_module, ref, :producer)
 
-  defp consumer_name(pipeline_module) do
-    String.to_atom("Flowex.Consumer_#{inspect(pipeline_module)}_#{inspect(make_ref())}")
-  end
+  defp consumer_name(pipeline_module, ref), do: Flowex.Names.via(pipeline_module, ref, :consumer)
 
   defp pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name) do
     %Flowex.Pipeline{
@@ -67,8 +55,8 @@ defmodule Flowex.PipelineBuilder do
     }
   end
 
-  defp init_pipes({producer_spec, producer_name}, {pipeline_module, opts}) do
-    (pipeline_module.pipes() ++ [pipeline_module.error_pipe])
+  defp init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts}) do
+    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
     |> Enum.reduce({[producer_spec], [producer_name]}, fn {atom, count, pipe_opts, type},
                                                           {wss, prev_names} ->
       opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
@@ -77,7 +65,7 @@ defmodule Flowex.PipelineBuilder do
 
       list =
         Enum.map(1..count, fn _i ->
-          init_pipe({pipeline_module, opts}, {atom, type}, prev_names)
+          init_pipe({pipeline_module, ref, opts}, {atom, type}, prev_names)
         end)
 
       {new_wss, names} = Enum.unzip(list)
@@ -95,15 +83,15 @@ defmodule Flowex.PipelineBuilder do
     end
   end
 
-  def init_pipe({pipeline_module, opts}, {atom, type}, prev_names) do
+  def init_pipe({pipeline_module, ref, opts}, {atom, type}, prev_names) do
     case Atom.to_charlist(atom) do
-      ~c"Elixir." ++ _ -> init_module_pipe({type, atom, opts}, prev_names)
-      _ -> init_function_pipe({type, pipeline_module, atom, opts}, prev_names)
+      ~c"Elixir." ++ _ -> init_module_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
+      _ -> init_function_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
     end
   end
 
-  defp init_function_pipe({type, pipeline_module, function, opts}, prev_names) do
-    name = String.to_atom("Flowex_#{pipeline_module}.#{function}_#{inspect(make_ref())}")
+  defp init_function_pipe({type, pipeline_module, ref, function, opts}, prev_names) do
+    name = Flowex.Names.via(pipeline_module, ref, {:function_stage, make_ref()})
 
     opts = %Flowex.StageOpts{
       type: type,
@@ -118,9 +106,9 @@ defmodule Flowex.PipelineBuilder do
     {worker_spec, name}
   end
 
-  defp init_module_pipe({type, module, opts}, prev_names) do
+  defp init_module_pipe({type, pipeline_module, ref, module, opts}, prev_names) do
     opts = module.init(opts)
-    name = String.to_atom("Flowex_#{module}.call_#{inspect(make_ref())}")
+    name = Flowex.Names.via(pipeline_module, ref, {:module_stage, make_ref()})
 
     opts = %Flowex.StageOpts{
       type: type,
