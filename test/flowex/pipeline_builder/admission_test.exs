@@ -26,9 +26,18 @@ defmodule Flowex.PipelineBuilder.AdmissionTest do
   test "a module init that does not return a map is refused on the sync track" do
     pipeline = BadModuleInitPipelineSync.start()
 
-    assert_raise ArgumentError, ~r/BadInitModule\.init\/1/, fn ->
-      BadModuleInitPipelineSync.call(pipeline, %BadModuleInitPipelineSync{number: 1})
-    end
+    # The sync walker raises inside its GenServer, so the refusal reaches the
+    # caller as its exit reason (wrapped by the GenServer call machinery) —
+    # assert the death certificate names the culprit, whatever the nesting.
+    caller =
+      spawn(fn ->
+        BadModuleInitPipelineSync.call(pipeline, %BadModuleInitPipelineSync{number: 1})
+      end)
+
+    ref = Process.monitor(caller)
+
+    assert_receive {:DOWN, ^ref, _, _, reason}, 1_000
+    assert inspect(reason) =~ "BadInitModule.init/1 must return a map"
   end
 
   test "a pipeline init that does not return a map is refused on the async track" do
