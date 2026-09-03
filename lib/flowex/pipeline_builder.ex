@@ -1,8 +1,7 @@
 defmodule Flowex.PipelineBuilder do
   @moduledoc "Defines functions to start and to stop a pipeline"
 
-  import Supervisor.Spec
-
+  @spec start(module(), map()) :: Flowex.Pipeline.t()
   def start(pipeline_module, opts) do
     {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
 
@@ -12,13 +11,18 @@ defmodule Flowex.PipelineBuilder do
     pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
   end
 
+  @spec supervised_start(module(), pid(), map()) :: Flowex.Pipeline.t()
   def supervised_start(pipeline_module, pid, opts) do
     {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
 
     sup_name = supervisor_name(pipeline_module, ref)
 
-    sup_spec =
-      supervisor(Flowex.Supervisor, [all_specs, sup_name], id: sup_name, restart: :permanent)
+    sup_spec = %{
+      id: sup_name,
+      start: {Flowex.Supervisor, :start_link, [all_specs, sup_name]},
+      restart: :permanent,
+      type: :supervisor
+    }
 
     {:ok, _sup_pid} = Supervisor.start_child(pid, sup_spec)
     pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
@@ -27,14 +31,20 @@ defmodule Flowex.PipelineBuilder do
   defp build_children(pipeline_module, opts) do
     ref = make_ref()
     producer_name = producer_name(pipeline_module, ref)
-    producer_spec = worker(Flowex.Producer, [nil, [name: producer_name]], id: producer_name)
+
+    producer_spec = %{
+      id: producer_name,
+      start: {Flowex.Producer, :start_link, [nil, [name: producer_name]]}
+    }
 
     {wss, last_names} = init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts})
 
     consumer_name = consumer_name(pipeline_module, ref)
 
-    consumer_worker_spec =
-      worker(Flowex.Consumer, [last_names, [name: consumer_name]], id: consumer_name)
+    consumer_worker_spec = %{
+      id: consumer_name,
+      start: {Flowex.Consumer, :start_link, [last_names, [name: consumer_name]]}
+    }
 
     {producer_name, consumer_name, wss ++ [consumer_worker_spec], ref}
   end
@@ -102,7 +112,7 @@ defmodule Flowex.PipelineBuilder do
       producer_names: prev_names
     }
 
-    worker_spec = worker(Flowex.Stage, [opts, [name: name]], id: name)
+    worker_spec = %{id: name, start: {Flowex.Stage, :start_link, [opts, [name: name]]}}
     {worker_spec, name}
   end
 
@@ -119,7 +129,7 @@ defmodule Flowex.PipelineBuilder do
       producer_names: prev_names
     }
 
-    worker_spec = worker(Flowex.Stage, [opts, [name: name]], id: name)
+    worker_spec = %{id: name, start: {Flowex.Stage, :start_link, [opts, [name: name]]}}
     {worker_spec, name}
   end
 end

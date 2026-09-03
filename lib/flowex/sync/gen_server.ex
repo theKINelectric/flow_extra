@@ -20,7 +20,7 @@ defmodule Flowex.Sync.GenServer do
   end
 
   defp do_call(ip, {pipeline_module, opts}) do
-    (pipeline_module.pipes() ++ [pipeline_module.error_pipe])
+    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
     |> Enum.reduce(ip, fn pipe, ip ->
       process(pipe, ip, pipeline_module, opts)
     end)

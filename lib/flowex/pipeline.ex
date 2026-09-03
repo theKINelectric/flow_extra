@@ -1,6 +1,13 @@
 defmodule Flowex.Pipeline do
   @moduledoc "Defines macros for pipeline creating"
 
+  @type t :: %__MODULE__{
+          module: module(),
+          in_name: term(),
+          out_name: term(),
+          sup_name: term()
+        }
+
   defstruct module: nil, in_name: nil, out_name: nil, sup_name: nil
 
   defmacro pipe(atom, options \\ [opts: [], count: 1]) do

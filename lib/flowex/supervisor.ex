@@ -8,6 +8,6 @@ defmodule Flowex.Supervisor do
   end
 
   def init(children) do
-    supervise(children, strategy: :rest_for_one)
+    Supervisor.init(children, strategy: :rest_for_one)
   end
 end
