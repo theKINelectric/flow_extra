@@ -73,6 +73,8 @@ defmodule Flowex.PipelineBuilder do
                                                           {wss, prev_names} ->
       opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
 
+      validate_count!(pipeline_module, atom, count)
+
       list =
         Enum.map(1..count, fn _i ->
           init_pipe({pipeline_module, opts}, {atom, type}, prev_names)
@@ -81,6 +83,16 @@ defmodule Flowex.PipelineBuilder do
       {new_wss, names} = Enum.unzip(list)
       {wss ++ new_wss, names}
     end)
+  end
+
+  defp validate_count!(pipeline_module, atom, count) do
+    if is_integer(count) and count >= 1 do
+      count
+    else
+      raise ArgumentError,
+            "pipe #{inspect(atom)} in pipeline #{inspect(pipeline_module)} " <>
+              "declared with count #{inspect(count)} — count must be a positive integer"
+    end
   end
 
   def init_pipe({pipeline_module, opts}, {atom, type}, prev_names) do
