@@ -7,6 +7,7 @@ defmodule Flowex.Supervisor do
     Elixir.Supervisor.start_link(__MODULE__, children, name: name)
   end
 
+  @impl true
   def init(children) do
     Supervisor.init(children, strategy: :rest_for_one)
   end

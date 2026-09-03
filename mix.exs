@@ -8,7 +8,6 @@ defmodule Flowex.Mixfile do
       elixir: ">= 1.3.0",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
-      preferred_cli_env: [espec: :test],
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       description: description(),
@@ -30,7 +29,6 @@ defmodule Flowex.Mixfile do
   defp deps do
     [
       {:gen_stage, "~> 1.0"},
-      {:espec, "~> 1.8", only: :test},
       {:credo, "~> 1.4", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       # Docs

@@ -1,9 +1,9 @@
 defmodule FunPipeline do
   use Flowex.Pipeline
 
-  pipe :add_one
-  pipe :mult_by_two
-  pipe :minus_three
+  pipe(:add_one)
+  pipe(:mult_by_two)
+  pipe(:minus_three)
 
   defstruct number: nil, a: nil, b: nil, c: nil
 

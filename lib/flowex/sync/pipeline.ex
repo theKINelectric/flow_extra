@@ -1,8 +1,8 @@
 defmodule Flowex.Sync.Pipeline do
+  @moduledoc "Sync pipeline behaviour — one GenServer walks the pipe line."
+
   defmacro __using__(_args) do
     quote do
-      IO.inspect("Warning! You are using Sync behaviour in #{__MODULE__} pipeline!")
-
       import Flowex.Pipeline
 
       Module.register_attribute(__MODULE__, :pipes, accumulate: true)
@@ -69,11 +69,9 @@ defmodule Flowex.Sync.Pipeline do
       def error_pipe, do: @error_pipe
 
       def pipe_info(name) do
-        if pipe = Enum.find(pipes(), &(elem(&1, 0) == name)) do
-          %{name: elem(pipe, 0), count: elem(pipe, 1), opts: elem(pipe, 2), type: elem(pipe, 3)}
-        else
-          nil
-        end
+        Enum.find_value(pipes(), fn {atom, count, opts, type} ->
+          atom == name && %{name: atom, count: count, opts: opts, type: type}
+        end)
       end
 
       def call(

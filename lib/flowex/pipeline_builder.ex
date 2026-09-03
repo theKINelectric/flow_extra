@@ -37,7 +37,8 @@ defmodule Flowex.PipelineBuilder do
       start: {Flowex.Producer, :start_link, [nil, [name: producer_name]]}
     }
 
-    {wss, last_names} = init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts})
+    {wss, last_names} =
+      init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts})
 
     consumer_name = consumer_name(pipeline_module, ref)
 
