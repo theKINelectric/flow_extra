@@ -18,7 +18,10 @@ defmodule Flowex.FormatterTest do
   test "the DSL keeps its parenthesis-free form in projects that import flowex" do
     {opts, _} = Code.eval_file(Path.expand("../../../.formatter.exs", __DIR__))
     exported = get_in(opts, [:export, :locals_without_parens]) || []
-    formatted = IO.iodata_to_binary(Code.format_string!(@pipeline, locals_without_parens: exported))
+
+    formatted =
+      IO.iodata_to_binary(Code.format_string!(@pipeline, locals_without_parens: exported))
+
     assert formatted <> "\n" == @pipeline
   end
 end
