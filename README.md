@@ -156,15 +156,19 @@ opts = %{a: 1, b: 2, c: 3}
 pipeline = FunPipeline.start(opts)
 
 #returns
-%Flowex.Pipeline{in_name: :"Flowex.Producer_#Reference<0.0.7.504>",
- module: FunPipeline, out_name: :"Flowex.Consumer_#Reference<0.0.7.521>",
- sup_pid: #PID<0.136.0>}
+%Flowex.Pipeline{
+  in_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.504>, :producer}}},
+  module: FunPipeline,
+  out_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.521>, :consumer}}},
+  sup_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.530>, :supervisor}}},
+  parent: nil,
+  owner_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.533>, :admission_owner}}}}
 ```
 What happened:
 - Three GenStages have been started - one for each of the function in pipeline. Each of GenStages is `:producer_consumer`;
 - One additional GenStage for error processing has been started (it is also `:producer_consumer`);
 - 'producer' and 'consumer' GenStages for input and output have been added;
-- All the components have been placed under Supervisor.
+- All the components have been placed under a `rest_for_one` line supervisor, together with the admission owner (see [Admission and overload](#admission-and-overload)) — the owner first, so its loss tears the whole line down.
 
 The next picture shows what the 'pipeline' is.
 ![alt text](figures/fun_pipeline.png "FunPipeline")
@@ -512,9 +516,9 @@ defmodule OnePipelinePerApp do
   use Application
 
   def start(_type, _opts) do
-    pipeline = PipelineOne.start
+    pipeline = PipelineOne.start()
     Application.put_env(:start_flowex, :pipeline, pipeline)
-    {:ok, pipeline.sup_pid}
+    {:ok, GenServer.whereis(pipeline.sup_name)}
   end
 end
 ```
@@ -561,7 +565,9 @@ Request a new feature by creating an issue.
 
 Create a pull request with new features or fixes.
 
-Flowex is tested using ESpec. So run:
+Flowex is tested using ExUnit, and kept honest by format, compile
+(warnings-as-errors), Dialyzer, and Credo --strict. So run:
 ```sh
-mix espec
+mix test
+mix format --check-formatted && mix compile --warnings-as-errors && mix dialyzer && mix credo --strict
 ```
