@@ -66,13 +66,11 @@ defmodule Flowex.Client.OwnershipTest do
     first_ref = make_ref()
     queued_ref = make_ref()
 
-    spawn(fn ->
-      Flowex.Client.call(
-        client,
-        %ClientTrapPipeline{report_to: self(), ref: first_ref},
-        2_000
-      )
-    end)
+    # The struct is built here so report_to is this test process, not the
+    # spawned caller.
+    first_struct = %ClientTrapPipeline{report_to: self(), ref: first_ref}
+
+    spawn(fn -> Flowex.Client.call(client, first_struct, 2_000) end)
 
     # Let the first request take the server, then queue one with a budget
     # that dies while it waits.
