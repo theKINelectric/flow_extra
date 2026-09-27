@@ -23,4 +23,4 @@ The declared floor is `elixir: "~> 1.15"`. This machine can only certify 1.20.4/
 
 ## Standing limitation
 
-Evidence filenames in `scripts/traps` were checked: they already write per-run-distinct `/tmp` names (`t6-dialyzer.sh`, `t7-hygiene.sh` use distinct prefixes); the audit's fixed-filename concern applies to older scripts no longer present.
+`scripts/traps/*.sh` evidence files now embed the run's PID (`/tmp/fb_run$$._t7_compile.txt` …), so concurrent runs can no longer overwrite one another's receipts — the audit's fixed-filename concern, closed. The runtime-matrix limitation above remains the open item.

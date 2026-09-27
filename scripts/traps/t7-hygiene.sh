@@ -14,11 +14,11 @@ FAILED=0
 say() { printf '[t7] %s\n' "$*"; }
 pin() { if [ "$1" -ne 0 ]; then say "FAIL: $2"; FAILED=1; else say "ok: $2"; fi; }
 
-MIX_ENV=dev mix compile --warnings-as-errors >/tmp/fb_t7_compile.txt 2>&1
-pin $? "mix compile --warnings-as-errors (see /tmp/fb_t7_compile.txt)"
+MIX_ENV=dev mix compile --warnings-as-errors >/tmp/fb_run$$._t7_compile.txt 2>&1
+pin $? "mix compile --warnings-as-errors (see /tmp/fb_run$$._t7_compile.txt)"
 
-mix credo --strict >/tmp/fb_t7_credo.txt 2>&1
-pin $? "mix credo --strict (see /tmp/fb_t7_credo.txt)"
+mix credo --strict >/tmp/fb_run$$._t7_credo.txt 2>&1
+pin $? "mix credo --strict (see /tmp/fb_run$$._t7_credo.txt)"
 
 [ ! -f .travis.yml ]; pin $? "no dead .travis.yml"
 ! grep -qi "travis" README.md; pin $? "no dead Travis badge in README"
@@ -34,8 +34,8 @@ grep -q "espec" mix.exs
 if [ $? -eq 0 ]; then pin 1 "espec leaves the deps"; else pin 0 "espec leaves the deps"; fi
 [ ! -d spec ]; pin $? "no spec/ dir (legacy suite migrated)"
 
-MIX_ENV=test mix test >/tmp/fb_t7_test.txt 2>&1
-pin $? "full ExUnit suite green (see /tmp/fb_t7_test.txt)"
+MIX_ENV=test mix test >/tmp/fb_run$$._t7_test.txt 2>&1
+pin $? "full ExUnit suite green (see /tmp/fb_run$$._t7_test.txt)"
 
 [ "$FAILED" -eq 0 ] && say "PASS: all hygiene pins hold" || say "RED: hygiene pins violated"
 exit "$FAILED"
