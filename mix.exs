@@ -43,7 +43,11 @@ defmodule Flowex.Mixfile do
 
   defp package do
     [
-      files: ~w(lib mix.exs README.md),
+      # The artifact must carry what consumers need downstream (FX-009): the
+      # formatter export (import_deps: [:flowex]), the license notice, and
+      # the README's figures. License METADATA below stays as-is — which
+      # declaration is authoritative is a human provenance decision.
+      files: ~w(lib mix.exs README.md .formatter.exs LICENSE figures),
       maintainers: ["Anton Mishchuk"],
       licenses: ["MIT"],
       links: %{"github" => "https://github.com/antonmi/flowex"}
