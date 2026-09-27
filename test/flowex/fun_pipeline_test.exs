@@ -18,13 +18,32 @@ defmodule FunPipelineTest do
       pipeline = FunPipeline.start()
       sup_pid = GenServer.whereis(pipeline.sup_name)
 
-      pipe_pids =
-        Supervisor.which_children(sup_pid) |> Enum.map(fn {_id, pid, :worker, [_]} -> pid end)
+      # The wrapper's children are the admission owner (a worker) and the
+      # line supervisor — every descendant must die with the stop.
+      child_pids =
+        Supervisor.which_children(sup_pid)
+        |> Enum.flat_map(fn
+          {_id, :restarting, _type, _modules} ->
+            []
+
+          {_id, pid, :worker, _modules} ->
+            [pid]
+
+          {_id, pid, :supervisor, _modules} ->
+            line_children =
+              try do
+                Supervisor.which_children(pid) |> Enum.map(fn {_id, p, _t, _m} -> p end)
+              rescue
+                _ -> []
+              end
+
+            [pid | line_children]
+        end)
 
       assert Process.alive?(sup_pid)
       FunPipeline.stop(pipeline)
       refute Process.alive?(sup_pid)
-      Enum.each(pipe_pids, &refute(Process.alive?(&1)))
+      Enum.each(child_pids, &refute(Process.alive?(&1)))
     end
   end
 

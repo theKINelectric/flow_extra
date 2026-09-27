@@ -4,6 +4,8 @@ defmodule Flowex.Stage do
   use GenStage
 
   def start_link(state, opts \\ []) do
+    name = Keyword.get(opts, :name)
+    if name, do: Flowex.Names.await_free!(name)
     GenStage.start_link(__MODULE__, state, opts)
   end
 

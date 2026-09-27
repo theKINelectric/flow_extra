@@ -29,10 +29,16 @@ defmodule Flowex.Pipeline do
           in_name: term(),
           out_name: term(),
           sup_name: term(),
-          parent: pid() | nil
+          parent: pid() | nil,
+          owner_name: term() | nil
         }
 
-  defstruct module: nil, in_name: nil, out_name: nil, sup_name: nil, parent: nil
+  defstruct module: nil,
+            in_name: nil,
+            out_name: nil,
+            sup_name: nil,
+            parent: nil,
+            owner_name: nil
 
   defmacro pipe(atom, options \\ [opts: [], count: 1]) do
     count = options[:count] || 1
@@ -94,17 +100,67 @@ defmodule Flowex.Pipeline do
   end
 
   @doc """
+  The call prelude, shared by every pipeline module: resolves the consumer
+  once, arms the monitor and the revocable reply alias (FX-005), and takes
+  the admission permit BEFORE any packet exists (FX-001) — an overloaded
+  pipeline refuses here, observably, with no work begun.
+  """
+  @spec prepare_call(Flowex.Pipeline.t(), term(), term(), reference()) ::
+          {pid(), reference(), reference()}
+  def prepare_call(pipeline, out_name, owner_name, ip_ref) do
+    consumer_pid = resolve_consumer!(out_name, pipeline)
+    monitor_ref = Process.monitor(consumer_pid)
+    reply_alias = Process.alias()
+
+    case Flowex.Admission.admit(owner_name, ip_ref) do
+      {:ok, _generation} ->
+        {consumer_pid, monitor_ref, reply_alias}
+
+      {:error, reason} ->
+        Process.demonitor(monitor_ref, [:flush])
+        Process.unalias(reply_alias)
+        raise Flowex.AdmissionError, pipeline: pipeline, reason: reason
+    end
+  end
+
+  @doc """
   Resolves the consumer through the registry — the ONE resolution a call
   makes (FX-005): the monitor and the submission both target this PID, so
   a consumer restart mid-call cannot pair one incarnation's monitor with
-  another's work. A nil lookup raises immediately, matching what a monitor
-  on a dead name would do.
+  another's work.
+
+  A consumer name that is absent while the pipeline's own supervisor still
+  exists means a restart is settling; the resolution waits it out briefly
+  so an honest restart surfaces as service and not as :noprocess. A
+  pipeline whose supervisor is gone refuses immediately.
   """
   @spec resolve_consumer!(term(), Flowex.Pipeline.t()) :: pid()
-  def resolve_consumer!(out_name, pipeline) do
+  def resolve_consumer!(out_name, pipeline = %Flowex.Pipeline{sup_name: sup_name}) do
     case GenServer.whereis(out_name) do
-      nil -> raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
-      pid -> pid
+      nil ->
+        if GenServer.whereis(sup_name) == nil do
+          raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
+        else
+          settle(out_name, sup_name, pipeline, System.monotonic_time(:millisecond) + 250)
+        end
+
+      pid ->
+        pid
+    end
+  end
+
+  defp settle(out_name, sup_name, pipeline, limit) do
+    case GenServer.whereis(out_name) do
+      nil ->
+        if System.monotonic_time(:millisecond) > limit do
+          raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
+        else
+          Process.sleep(2)
+          settle(out_name, sup_name, pipeline, limit)
+        end
+
+      pid ->
+        pid
     end
   end
 
@@ -185,22 +241,34 @@ defmodule Flowex.Pipeline do
         end)
       end
 
+      unquote(call_def())
+      unquote(wait_response_def())
+      unquote(finish_timeout_def())
+      unquote(cast_def())
+    end
+  end
+
+  defp call_def do
+    quote do
       def call(
-            pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
+            pipeline = %Flowex.Pipeline{
+              in_name: in_name,
+              out_name: out_name,
+              owner_name: owner_name
+            },
             struct = %__MODULE__{},
             timeout \\ 5_000
           ) do
         pid = self()
         deadline = Flowex.Pipeline.deadline(timeout)
-        consumer_pid = Flowex.Pipeline.resolve_consumer!(out_name, pipeline)
-        monitor_ref = Process.monitor(consumer_pid)
-
-        # A revocable reply destination (FX-005): when this call ends, the
-        # alias is revoked and a late result is dropped by the VM instead of
-        # rotting in the caller's mailbox.
-        reply_alias = Process.alias()
-
         ip_ref = make_ref()
+
+        # One consumer incarnation for monitor and submission, a revocable
+        # reply alias, and admission before forwarding — the permit is
+        # reserved before the packet exists anywhere and held until the
+        # consumer releases it, past this caller's own timeout.
+        {consumer_pid, monitor_ref, reply_alias} =
+          Flowex.Pipeline.prepare_call(pipeline, out_name, owner_name, ip_ref)
 
         ip = %Flowex.IP{
           struct: Map.delete(struct, :__struct__),
@@ -210,11 +278,14 @@ defmodule Flowex.Pipeline do
           deadline: deadline
         }
 
-        # Submitted to the same incarnation the monitor watches.
         GenServer.cast(consumer_pid, {in_name, ip})
         wait_response(pid, monitor_ref, ip_ref, reply_alias, pipeline, deadline)
       end
+    end
+  end
 
+  defp wait_response_def do
+    quote do
       # The three ways a call ends — the pipeline answers, the crash
       # cascade does (a stage dies, the rest_for_one supervisor tears the
       # line down, the consumer's death trips the monitor), or the budget
@@ -239,7 +310,11 @@ defmodule Flowex.Pipeline do
             finish_timeout(pid, ip_ref, reply_alias, pipeline)
         end
       end
+    end
+  end
 
+  defp finish_timeout_def do
+    quote do
       defp finish_timeout(pid, ip_ref, reply_alias, pipeline) do
         # The reply may have beaten the clock to the mailbox: check for
         # exactly this request's answer without consuming anything else.
@@ -254,14 +329,37 @@ defmodule Flowex.Pipeline do
             raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
         end
       end
+    end
+  end
 
+  defp cast_def do
+    quote do
       def cast(
-            pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
+            pipeline = %Flowex.Pipeline{
+              in_name: in_name,
+              out_name: out_name,
+              owner_name: owner_name
+            },
             struct = %__MODULE__{}
           ) do
-        # Fire-and-forget: no reply destination, no deadline.
-        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: nil}
-        GenServer.cast(out_name, {in_name, ip})
+        # Fire-and-forget: no reply destination, no deadline — but still
+        # admitted (FX-001): :ok now MEANS accepted-and-accounted-for. An
+        # overloaded pipeline answers {:error, :overloaded} instead of
+        # silently discarding the work later.
+        ip = %Flowex.IP{
+          struct: Map.delete(struct, :__struct__),
+          requester: nil,
+          ref: make_ref()
+        }
+
+        case Flowex.Admission.admit(owner_name, ip.ref) do
+          {:ok, _generation} ->
+            GenServer.cast(out_name, {in_name, ip})
+            :ok
+
+          {:error, reason} ->
+            {:error, reason}
+        end
       end
     end
   end

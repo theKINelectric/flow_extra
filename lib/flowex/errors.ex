@@ -38,3 +38,32 @@ defmodule Flowex.PipeError do
 
   defexception error: nil, message: nil, pipe: nil, struct: nil
 end
+
+defmodule Flowex.AdmissionError do
+  @moduledoc """
+  The pipeline refused the request before admission (FX-001): its
+  admitted-work capacity is exhausted (`:overloaded`), or its topology is
+  settling after a failure and asked the caller to retry
+  (`:unavailable`). No permit was taken and no work began — this is a
+  policy outcome, not a pipeline failure.
+  """
+
+  defexception pipeline: nil, reason: nil
+
+  @impl true
+  def message(error = %__MODULE__{reason: :overloaded}) do
+    "Flowex pipeline #{describe(error)} is at its admitted-work capacity — refused before admission"
+  end
+
+  def message(error = %__MODULE__{reason: :unavailable}) do
+    "Flowex pipeline #{describe(error)} is settling after a topology failure — refused before admission, retry"
+  end
+
+  def message(error = %__MODULE__{reason: reason}) do
+    "Flowex pipeline #{describe(error)} refused admission: #{inspect(reason)}"
+  end
+
+  defp describe(%__MODULE__{pipeline: nil}), do: ""
+
+  defp describe(%__MODULE__{pipeline: pipeline}), do: inspect(pipeline.module)
+end

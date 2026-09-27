@@ -209,6 +209,19 @@ Two `init/1` callbacks run when a pipeline starts, both **in the starting caller
 
 `init/1` is configuration preparation: it must return a map (module pipes) or a map/keyword list (pipeline), and the result is validated before any topology starts. It is **not** a worker-resource lifecycle callback — use a process-owned mechanism for resources that must be recreated with each worker. Supervisor-driven restarts reuse the prepared options; only a new explicit start runs `init/1` again.
 
+## Admission and overload
+The asynchronous engine bounds admitted work — queued plus executing packets together — at `admission_capacity` (pipeline option, default 100). A submission either acquires a permit or is refused immediately and observably:
+
+```elixir
+FunPipeline.call(pipeline, %FunPipeline{number: 2})
+# raises Flowex.AdmissionError (reason: :overloaded) when the pipeline is at capacity
+
+FunPipeline.cast(pipeline, %FunPipeline{number: 2})
+# :ok — accepted and accounted for — or {:error, :overloaded}
+```
+
+`cast/2` returning `:ok` therefore **means the work is admitted**: it will be accounted to a terminal outcome (`Flowex.Admission.report/1` exposes the ledger: succeeded, recovered, expired, unknown — a topology failure marks its generation's outstanding work `unknown`, never an invented success or failure). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues. A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
+
 ## Run via client
 Another way is using `Flowex.Client` module which implements GenServer behavior.
 The `Flowex.Client.start\1` function receives pipeline struct as an argument.
