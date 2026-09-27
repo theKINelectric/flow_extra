@@ -19,7 +19,7 @@ defmodule Flowex.Pipeline.ReplyOwnershipTest do
 
     error =
       assert_raise Flowex.PipelineError, fn ->
-        ReplyTrapPipeline.call(pipeline, %ReplyTrapPipeline{report_to: self(), ref: :late}, 1)
+        ReplyTrapPipeline.call(pipeline, %ReplyTrapPipeline{report_to: self(), ref: :late}, 40)
       end
 
     assert error.reason == :timeout
@@ -36,7 +36,7 @@ defmodule Flowex.Pipeline.ReplyOwnershipTest do
 
     for i <- 1..5 do
       assert_raise Flowex.PipelineError, fn ->
-        ReplyTrapPipeline.call(pipeline, %ReplyTrapPipeline{report_to: self(), ref: i}, 1)
+        ReplyTrapPipeline.call(pipeline, %ReplyTrapPipeline{report_to: self(), ref: i}, 40)
       end
 
       assert_receive {:worked, ^i}, 2_000
@@ -52,11 +52,11 @@ defmodule Flowex.Pipeline.ReplyOwnershipTest do
       ReplyTrapTwoStagePipeline.call(
         pipeline,
         %ReplyTrapTwoStagePipeline{report_to: self(), ref: :expired},
-        30
+        40
       )
     end
 
-    # The first stage began inside the 30ms budget and provably finished
+    # The first stage began inside the 40ms budget and provably finished
     # after it (an executing callback may outlive the waiter)…
     assert_receive {:first_done, :expired}, 2_000
 
