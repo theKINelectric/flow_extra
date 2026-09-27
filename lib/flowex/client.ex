@@ -9,6 +9,11 @@ defmodule Flowex.Client do
   failures (a missed deadline, a dead pipeline) raise as
   `Flowex.PipelineError` at the caller boundary without killing the
   reusable client; unexpected implementation failures crash it normally.
+  Admission refusals are expected request failures too (FX-001 closure):
+  `call/3` raises `Flowex.AdmissionError` the same way, and `cast/2`
+  reports the pipeline's refusal — `:ok` from the client means the
+  pipeline accepted and accounted the work, exactly as `cast/2` on the
+  pipeline itself.
   """
 
   use GenServer
@@ -35,7 +40,8 @@ defmodule Flowex.Client do
   end
 
   @doc """
-  Calls the pipeline through the client GenServer.
+  Calls the pipeline through the client GenServer. Expected request
+  failures raise at this boundary; the client survives them.
   """
   @spec call(GenServer.server(), struct(), timeout()) :: struct()
   def call(pid, struct, timeout \\ 6_000) do
@@ -44,12 +50,19 @@ defmodule Flowex.Client do
     case GenServer.call(pid, {:call, struct, deadline}, outer_timeout(deadline)) do
       {:ok, result} -> result
       {:error, %Flowex.PipelineError{} = error} -> raise error
+      {:error, %Flowex.AdmissionError{} = error} -> raise error
     end
   end
 
-  @spec cast(GenServer.server(), struct()) :: :ok
+  @doc """
+  Casts through the client and returns the pipeline's own answer —
+  `:ok` when the work was admitted and accounted, `{:error, reason}`
+  when the pipeline refused it.
+  """
+  @spec cast(GenServer.server(), struct()) ::
+          :ok | {:error, :overloaded | :unavailable | :noprocess}
   def cast(pid, struct) do
-    GenServer.cast(pid, {:cast, struct})
+    GenServer.call(pid, {:cast, struct})
   end
 
   @doc """
@@ -83,13 +96,15 @@ defmodule Flowex.Client do
         # Expected request failure: refuse through the protocol and
         # re-raise at the caller boundary — the reusable client survives.
         error in Flowex.PipelineError -> {:reply, {:error, error}, pipeline}
+        error in Flowex.AdmissionError -> {:reply, {:error, error}, pipeline}
       end
     end
   end
 
   @impl true
-  def handle_cast({:cast, struct}, pipeline) do
-    pipeline.module.cast(pipeline, struct)
-    {:noreply, pipeline}
+  def handle_call({:cast, struct}, _from, pipeline) do
+    # The pipeline's own acknowledgment IS the reply: a refusal the
+    # engine already observed is not swallowed into :ok (FX-001 closure).
+    {:reply, pipeline.module.cast(pipeline, struct), pipeline}
   end
 end

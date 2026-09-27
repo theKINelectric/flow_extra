@@ -130,10 +130,14 @@ defmodule Flowex.PipelineBuilder do
     # The wrapper (FX-001, C design record): the admission owner FIRST, the
     # line second, under rest_for_one — the owner's death tears the whole
     # line down before a fresh owner can reopen capacity, and any line
-    # worker's death quiesces the owner's generation.
+    # worker's death quiesces the owner's generation. The owner carries
+    # the ingress pair so a submission's reservation and its forwarding
+    # are one transaction inside it.
     owner_spec = %{
       id: owner_name,
-      start: {Flowex.Admission, :start_link, [capacity, worker_names, owner_name]}
+      start:
+        {Flowex.Admission, :start_link,
+         [capacity, worker_names, {producer_name, consumer_name}, owner_name]}
     }
 
     line_sup_spec = %{
