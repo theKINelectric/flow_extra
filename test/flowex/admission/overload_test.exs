@@ -199,6 +199,126 @@ defmodule Flowex.Admission.OverloadTest do
     Task.shutdown(task, :brutal_kill)
   end
 
+  test "a cast's :unavailable refusal is not followed by late execution" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    owner = GenServer.whereis(pipeline.owner_name)
+    # The trap must catch the OPEN pipeline's suspension (the acknowledged
+    # admission window), not the boot-time settling that legitimately
+    # refuses: wait for the owner to attach before suspending it.
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+    :sys.suspend(owner)
+    observer = self()
+
+    caller =
+      spawn(fn ->
+        outcome =
+          AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+            observer: observer,
+            id: :cast
+          })
+
+        send(observer, {:outcome, :cast, outcome})
+
+        receive do
+          :stop -> :ok
+        after
+          2_000 -> :ok
+        end
+      end)
+
+    assert_receive {:outcome, :cast, {:error, :unavailable}}, 700
+    assert Process.alive?(caller)
+    :sys.resume(owner)
+
+    # The refusal said the submission was not accepted: the request still
+    # queued behind the suspension must be refused at dequeue by its own
+    # expired admission deadline — not executed after the fact.
+    refute_receive {:entered, :cast, _worker}, 150
+
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+    assert Flowex.Admission.report(pipeline.owner_name).active == 0
+    send(caller, :stop)
+  end
+
+  test "a call's :unavailable refusal is not followed by late execution" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    owner = GenServer.whereis(pipeline.owner_name)
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+    :sys.suspend(owner)
+    observer = self()
+
+    caller =
+      spawn(fn ->
+        outcome =
+          try do
+            AdmissionTrapPipeline.call(
+              pipeline,
+              %AdmissionTrapPipeline{observer: observer, id: :call},
+              1_000
+            )
+
+            :returned
+          rescue
+            e in Flowex.AdmissionError -> {:refused, e.reason, Map.get(e, :request_ref)}
+          end
+
+        send(observer, {:outcome, :call, outcome})
+
+        receive do
+          :stop -> :ok
+        after
+          2_000 -> :ok
+        end
+      end)
+
+    assert_receive {:outcome, :call, {:refused, :unavailable, request_ref}}, 700
+
+    # An outcome learned by its acknowledgment timing out is uncertain,
+    # not a proven never-admitted: it carries the request identity so the
+    # caller can reconcile against the owner's ledger.
+    assert is_reference(request_ref)
+    assert Process.alive?(caller)
+    :sys.resume(owner)
+
+    refute_receive {:entered, :call, _worker}, 150
+
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+    report = Flowex.Admission.report(pipeline.owner_name)
+    assert report.active == 0 and request_ref not in report.refs
+    send(caller, :stop)
+  end
+
+  test "reattachment watches each worker exactly once — no monitor accumulation" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    owner = GenServer.whereis(pipeline.owner_name)
+
+    count = fn ->
+      {:monitors, monitors} = Process.info(owner, :monitors)
+      length(monitors)
+    end
+
+    initial = count.()
+
+    counts =
+      for _ <- 1..2 do
+        old = GenServer.whereis(pipeline.out_name)
+        generation = Flowex.Admission.report(owner).generation
+        Process.exit(old, :kill)
+
+        wait_until(fn ->
+          report = Flowex.Admission.report(owner)
+
+          report.generation > generation and report.status == :open and
+            GenServer.whereis(pipeline.out_name) != old
+        end)
+
+        count.()
+      end
+
+    assert initial > 0
+    assert counts == [initial, initial]
+  end
+
   test "killing the owner tears down the line and reopens fresh, old work dead" do
     pipeline = ReplyTrapPipeline.start(%{admission_capacity: 2})
 
