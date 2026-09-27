@@ -48,10 +48,10 @@ defmodule Flowex.Sync.Pipeline do
         }
 
         {:ok, sup_pid} = Supervisor.start_child(pid, sup_spec)
-        do_start(sup_pid, name)
+        do_start(sup_pid, name, pid)
       end
 
-      defp do_start(sup_pid, name) do
+      defp do_start(sup_pid, name, parent \\ nil) do
         [{gen_server_name, _prod, :worker, [Flowex.Sync.GenServer]}] =
           Supervisor.which_children(sup_pid)
 
@@ -59,7 +59,8 @@ defmodule Flowex.Sync.Pipeline do
           in_name: gen_server_name,
           module: __MODULE__,
           out_name: gen_server_name,
-          sup_name: name
+          sup_name: name,
+          parent: parent
         }
       end
 
