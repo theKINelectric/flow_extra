@@ -6,9 +6,9 @@ defmodule Flowex.PackageDownstreamTest do
   real package, extract it, scaffold a fresh downstream project that depends
   on NOTHING but the extracted artifact, and prove the formatter export
   arrives (a consumer's `pipe :double, count: 2` keeps its form) and a
-  pipeline actually runs (21 → 42). License metadata is deliberately NOT
-  asserted here: which declaration is authoritative is a human provenance
-  decision (see docs/research/flowex/E-artifact-and-provenance.md).
+  pipeline actually runs (21 → 42). License metadata is pinned separately in
+  `package_test.exs` (Apache-2.0, decided 2026-09-27 — see
+  docs/research/flowex/E-artifact-and-provenance.md).
   """
 
   test "a fresh downstream project formats and runs from the built artifact" do

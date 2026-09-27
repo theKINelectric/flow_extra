@@ -5,9 +5,14 @@
 
 This is a vendored, factory-maintained fork of [antonmi/flowex](https://github.com/antonmi/flowex),
 revived by the Factory on Elixir 1.20/OTP 29. Lineage: `antonmi/flowex @ 3a9ebae`;
-fork point: `3ccf92e`. The author's MIT LICENSE is kept. Upstream declared the
-project unsupported (see ALF); development continues here as the Factory's
-Railway backbone.
+fork point: `3ccf92e`. Upstream declared the project unsupported (see ALF); development
+continues here as the Factory's Railway backbone.
+
+**License: Apache-2.0.** The LICENSE file is upstream's own — added by Anton Mishchuk in
+2017 (`d78a761`, tagged v0.5.1) and present at the fork point and at upstream master.
+Upstream's published hex metadata said "MIT", contradicting the author's own file; this
+fork carries the file's Apache-2.0 forward and declares it consistently. Original
+attribution is preserved.
 
 ## Railway Flow-Based Programming.
 ## The library is not supported anymore, see the [ALF](https://github.com/antonmi/alf) project.

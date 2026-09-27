@@ -19,7 +19,18 @@ The declared floor is `elixir: "~> 1.15"`. This machine can only certify 1.20.4/
 - The README fork notice (`542322e`, fork-era) states "The author's MIT LICENSE is kept" — contradicting the checked-in file.
 - `mix.exs` package metadata declares `licenses: ["MIT"]` — contradicting the checked-in file. `source_url`/links and version `0.5.4` identify the upstream repository, not this fork.
 
-**Human decisions required before any distribution:** which license declaration is authoritative (the file's Apache-2.0 has the oldest and strongest evidence), whether the fork may relicense at all, the corrected package metadata, the maintained source URL, and the fork's version identity. None of these were changed mechanically. The only metadata-adjacent change is the files allowlist above.
+**Decision, 2026-09-27 (maintainer, on the evidence): Apache-2.0.** The LICENSE file is
+upstream's own — added by Anton Mishchuk himself (`d78a761`, 2017-06-24, tagged v0.5.1),
+present at the fork point `3ccf92e`, and verified still present at upstream `master` on
+2026-09-27 (raw `LICENSE` fetched: "Copyright 2017 Anton Mishchuk … Apache License,
+Version 2.0"). Upstream's hex.pm page declares "MIT" — the fork inherited that
+contradiction through `mix.exs`; the author's own file outranks stale package metadata,
+and inherited Apache-2.0 code cannot be relabeled. Applied: `licenses: ["Apache-2.0"]`,
+the README fork notice states the facts above with attribution preserved, `source_url`
+points at the maintained Codeberg location (upstream kept as a second link), and version
+identity moves to `0.6.0` (the fork's own line — the admission protocol and `cast/2`'s
+observable refusal are breaking). Pinned by `package_test.exs`: metadata and file must
+agree on Apache-2.0.
 
 ## Standing limitation
 
