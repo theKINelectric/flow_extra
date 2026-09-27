@@ -6,8 +6,11 @@ defmodule Flowex.PackageDownstreamTest do
   real package, extract it, scaffold a fresh downstream project that depends
   on NOTHING but the extracted artifact, and prove the formatter export
   arrives (a consumer's `pipe :double, count: 2` keeps its form) and a
-  pipeline actually runs (21 → 42). License metadata is pinned separately in
-  `package_test.exs` (Apache-2.0, decided 2026-09-27 — see
+  pipeline actually runs (21 → 42). The pursuit E checklist is exercised in
+  full from the artifact itself: startup, one successful pipeline, the
+  error route (:boom recovered by the error pipe), and a deadline
+  (PipelineError :timeout, not a hang). License metadata is pinned
+  separately in `package_test.exs` (Apache-2.0, decided 2026-09-27 — see
   docs/research/flowex/E-artifact-and-provenance.md).
   """
 
@@ -85,6 +88,19 @@ defmodule Flowex.PackageDownstreamTest do
         def double(%{number: n}, _opts), do: %{number: n * 2}
         def rescue_it(_error, struct, _opts), do: struct
       end
+
+      defmodule ConsumerApp.SlowPipeline do
+        use Flowex.Pipeline
+
+        defstruct number: nil
+
+        pipe :slow
+
+        def slow(%{number: n}, _opts) do
+          Process.sleep(200)
+          %{number: n}
+        end
+      end
       """)
 
       {_, 0} = System.cmd("mix", ["deps.get"], cd: downstream, stderr_to_stdout: true)
@@ -109,13 +125,25 @@ defmodule Flowex.PackageDownstreamTest do
             "-e",
             ~s[pipeline = ConsumerApp.Pipeline.start()] <>
               ~s[\nresult = ConsumerApp.Pipeline.call(pipeline, %ConsumerApp.Pipeline{number: 21})] <>
-              ~s[\nIO.puts("DOWNSTREAM_RESULT=" <> Integer.to_string(result.number))]
+              ~s[\nIO.puts("DOWNSTREAM_RESULT=" <> Integer.to_string(result.number))] <>
+              ~s[\nrescued = ConsumerApp.Pipeline.call(pipeline, %ConsumerApp.Pipeline{number: :boom})] <>
+              ~s[\nIO.puts("DOWNSTREAM_ERROR_ROUTE=" <> inspect(rescued.number))] <>
+              ~s[\nslow = ConsumerApp.SlowPipeline.start()] <>
+              ~s[\ntry do] <>
+              ~s[\n  ConsumerApp.SlowPipeline.call(slow, %ConsumerApp.SlowPipeline{number: 1}, 10)] <>
+              ~s[\n  IO.puts("DOWNSTREAM_TIMEOUT=did-not-raise")] <>
+              ~s[\nrescue] <>
+              ~s[\n  error in Flowex.PipelineError ->] <>
+              ~s[\n    IO.puts("DOWNSTREAM_TIMEOUT=" <> inspect(error.reason))] <>
+              ~s[\nend]
           ],
           cd: downstream,
           stderr_to_stdout: true
         )
 
       assert run_out =~ "DOWNSTREAM_RESULT=42", run_out
+      assert run_out =~ "DOWNSTREAM_ERROR_ROUTE=:boom", run_out
+      assert run_out =~ "DOWNSTREAM_TIMEOUT=:timeout", run_out
     after
       File.rm_rf!(tmp)
     end
