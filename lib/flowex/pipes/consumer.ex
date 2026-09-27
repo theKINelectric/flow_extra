@@ -15,9 +15,10 @@ defmodule Flowex.Consumer do
 
   @impl true
   def handle_events([ip], _from, nil) do
-    if is_pid(ip.requester) do
-      send(ip.requester, ip)
-    end
+    # The reply destination is revocable (FX-005): calls carry a process
+    # alias, casts carry nothing. `requester` remains on the packet for
+    # observation.
+    if ip.reply_to, do: send(ip.reply_to, ip)
 
     {:noreply, [], nil}
   end

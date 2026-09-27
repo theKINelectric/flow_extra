@@ -96,19 +96,23 @@ defmodule Flowex.Sync.Pipeline do
       end
 
       def call(
-            pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
+            pipeline = %Flowex.Pipeline{in_name: in_name},
             struct = %__MODULE__{},
             timeout \\ 5_000
           ) do
-        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__)}
-        ip = GenServer.call(in_name, ip, timeout)
+        # One deadline (FX-005): the packet carries it, the wait derives from
+        # it, and a packet that expired in the mailbox queue raises the
+        # caller's own timeout without running a single callback.
+        deadline = Flowex.Pipeline.deadline(timeout)
+
+        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), deadline: deadline}
+        ip = GenServer.call(in_name, ip, Flowex.Pipeline.remaining(deadline))
+        Flowex.Pipeline.unwrap!(ip, pipeline)
         struct(%__MODULE__{}, ip.struct)
       end
 
-      def cast(
-            pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
-            struct = %__MODULE__{}
-          ) do
+      def cast(%Flowex.Pipeline{in_name: in_name}, struct = %__MODULE__{}) do
+        # Fire-and-forget: no deadline.
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__)}
         GenServer.cast(in_name, ip)
       end

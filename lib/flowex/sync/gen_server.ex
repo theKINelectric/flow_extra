@@ -51,17 +51,24 @@ defmodule Flowex.Sync.GenServer do
       %{ip | error: error_struct}
   end
 
-  # Dispatch on stage type AND error state (FX-004), mirroring Flowex.Stage:
-  # a healthy packet skips the error track entirely, a failed packet skips
-  # the remaining normal pipes and reaches the error handler.
-  defp process(stage = %Flowex.StageOpts{type: type}, ip) do
-    if ip.error do
-      do_process_error(ip, stage)
-    else
-      case type do
-        :error_pipe -> ip
-        :pipe -> do_process(ip, stage)
-      end
+  # Dispatch on the packet's deadline, stage type, AND error state —
+  # mirroring Flowex.Stage: an expired packet skips every remaining stage
+  # (no callback, no error handler) and goes home expired; a healthy packet
+  # skips the error track entirely; a failed packet skips the remaining
+  # normal pipes and reaches the error handler.
+  defp process(stage, ip) do
+    cond do
+      Flowex.Pipeline.expired?(ip.deadline) ->
+        %{ip | expired: true}
+
+      ip.error ->
+        do_process_error(ip, stage)
+
+      stage.type == :error_pipe ->
+        ip
+
+      true ->
+        do_process(ip, stage)
     end
   end
 

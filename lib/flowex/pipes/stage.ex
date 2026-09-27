@@ -15,23 +15,33 @@ defmodule Flowex.Stage do
 
   @impl true
   def handle_events([ip], _from, state = %Flowex.StageOpts{type: :pipe}) do
-    if ip.error do
-      {:noreply, [ip], state}
+    if Flowex.Pipeline.expired?(ip.deadline) do
+      # The budget died before this stage could begin: no callback runs and
+      # no error handler runs — the packet goes home expired (FX-005).
+      {:noreply, [%{ip | expired: true}], state}
     else
-      new_ip = try_apply(ip, {state.module, state.function, state.opts})
-      {:noreply, [new_ip], state}
+      if ip.error do
+        {:noreply, [ip], state}
+      else
+        new_ip = try_apply(ip, {state.module, state.function, state.opts})
+        {:noreply, [new_ip], state}
+      end
     end
   end
 
   @impl true
   def handle_events([ip], _from, state = %Flowex.StageOpts{type: :error_pipe}) do
-    if ip.error do
-      struct = struct(state.module, ip.struct)
-      result = apply(state.module, state.function, [ip.error, struct, state.opts])
-      ip_struct = Map.merge(ip.struct, Map.delete(result, :__struct__))
-      {:noreply, [%{ip | struct: ip_struct}], state}
+    if Flowex.Pipeline.expired?(ip.deadline) do
+      {:noreply, [%{ip | expired: true}], state}
     else
-      {:noreply, [ip], state}
+      if ip.error do
+        struct = struct(state.module, ip.struct)
+        result = apply(state.module, state.function, [ip.error, struct, state.opts])
+        ip_struct = Map.merge(ip.struct, Map.delete(result, :__struct__))
+        {:noreply, [%{ip | struct: ip_struct}], state}
+      else
+        {:noreply, [ip], state}
+      end
     end
   end
 

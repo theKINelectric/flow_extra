@@ -12,7 +12,7 @@ defmodule ReplyTrapPipeline do
   pipe(:work)
 
   def work(%{report_to: report_to, ref: ref}, _opts) do
-    Process.sleep(80)
+    Process.sleep(200)
     if report_to, do: send(report_to, {:worked, ref})
     %{}
   end
@@ -32,7 +32,7 @@ defmodule ReplyTrapTwoStagePipeline do
   pipe(:afterwards)
 
   def slow(%{report_to: report_to, ref: ref}, _opts) do
-    Process.sleep(80)
+    Process.sleep(200)
     if report_to, do: send(report_to, {:first_done, ref})
     %{}
   end

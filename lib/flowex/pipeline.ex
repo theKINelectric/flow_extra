@@ -94,16 +94,54 @@ defmodule Flowex.Pipeline do
   end
 
   @doc """
-  Resolves the consumer through the registry and monitors it. Used by the
-  generated `call/2` — kept here so the macro's generated code stays lean.
+  Resolves the consumer through the registry — the ONE resolution a call
+  makes (FX-005): the monitor and the submission both target this PID, so
+  a consumer restart mid-call cannot pair one incarnation's monitor with
+  another's work. A nil lookup raises immediately, matching what a monitor
+  on a dead name would do.
   """
-  @spec monitor_consumer!(term(), Flowex.Pipeline.t()) :: reference()
-  def monitor_consumer!(out_name, pipeline) do
+  @spec resolve_consumer!(term(), Flowex.Pipeline.t()) :: pid()
+  def resolve_consumer!(out_name, pipeline) do
     case GenServer.whereis(out_name) do
       nil -> raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
-      pid -> Process.monitor(pid)
+      pid -> pid
     end
   end
+
+  @doc """
+  The absolute local monotonic deadline (milliseconds) for a call timeout;
+  `:infinity` maps to `nil` — no deadline. Local to one BEAM node.
+  """
+  @spec deadline(timeout()) :: integer() | nil
+  def deadline(:infinity), do: nil
+
+  def deadline(timeout) when is_integer(timeout),
+    do: System.monotonic_time(:millisecond) + timeout
+
+  @doc "Remaining budget for an absolute deadline — `:infinity` when there is none."
+  @spec remaining(integer() | nil) :: timeout()
+  def remaining(nil), do: :infinity
+
+  def remaining(deadline),
+    do: max(0, deadline - System.monotonic_time(:millisecond))
+
+  @doc "Whether a packet's deadline has passed (`nil` never expires)."
+  @spec expired?(integer() | nil) :: boolean()
+  def expired?(nil), do: false
+
+  def expired?(deadline), do: System.monotonic_time(:millisecond) >= deadline
+
+  @doc """
+  Delivers a finished packet to the caller: a packet the pipeline itself
+  expired raises the caller's own timeout — the caller cannot tell (and
+  need not) whether its wait or the pipeline noticed the deadline first.
+  """
+  @spec unwrap!(Flowex.IP.t(), Flowex.Pipeline.t()) :: :ok
+  def unwrap!(%Flowex.IP{expired: true}, pipeline) do
+    raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
+  end
+
+  def unwrap!(_ip, _pipeline), do: :ok
 
   @doc """
   Validates pipeline-level `init/1` output at admission: whatever init
@@ -153,34 +191,66 @@ defmodule Flowex.Pipeline do
             timeout \\ 5_000
           ) do
         pid = self()
-        # :erlang.monitor takes pids or local atoms only — no via — so the
-        # consumer name is resolved through the registry first. A nil lookup
-        # raises immediately, matching what a monitor on a dead name would do.
-        monitor_ref = Flowex.Pipeline.monitor_consumer!(out_name, pipeline)
+        deadline = Flowex.Pipeline.deadline(timeout)
+        consumer_pid = Flowex.Pipeline.resolve_consumer!(out_name, pipeline)
+        monitor_ref = Process.monitor(consumer_pid)
+
+        # A revocable reply destination (FX-005): when this call ends, the
+        # alias is revoked and a late result is dropped by the VM instead of
+        # rotting in the caller's mailbox.
+        reply_alias = Process.alias()
 
         ip_ref = make_ref()
-        ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: pid, ref: ip_ref}
 
-        GenServer.cast(out_name, {in_name, ip})
-        wait_response(pid, monitor_ref, ip_ref, pipeline, timeout)
+        ip = %Flowex.IP{
+          struct: Map.delete(struct, :__struct__),
+          requester: pid,
+          ref: ip_ref,
+          reply_to: reply_alias,
+          deadline: deadline
+        }
+
+        # Submitted to the same incarnation the monitor watches.
+        GenServer.cast(consumer_pid, {in_name, ip})
+        wait_response(pid, monitor_ref, ip_ref, reply_alias, pipeline, deadline)
       end
 
-      # The two ways a call ends, and both are the caller's liveness contract:
-      # the pipeline answers, or the crash cascade does (a stage dies, the
-      # rest_for_one supervisor tears the line down, the consumer's death
-      # trips the monitor below). A slow-but-alive pipeline ends neither way —
-      # the deadline is the third ending, so no caller waits forever.
-      defp wait_response(pid, monitor_ref, ip_ref, pipeline, timeout) do
+      # The three ways a call ends — the pipeline answers, the crash
+      # cascade does (a stage dies, the rest_for_one supervisor tears the
+      # line down, the consumer's death trips the monitor), or the budget
+      # does. On every ending the alias is revoked and the monitor removed;
+      # a reply that already beat the clock WINS over the deadline (an
+      # arrived answer is an answer), and anything later is dropped by the
+      # revoked alias.
+      defp wait_response(pid, monitor_ref, ip_ref, reply_alias, pipeline, deadline) do
         receive do
           %Flowex.IP{requester: ^pid, ref: ^ip_ref} = ip ->
             Process.demonitor(monitor_ref, [:flush])
+            Process.unalias(reply_alias)
+            Flowex.Pipeline.unwrap!(ip, pipeline)
             struct(%__MODULE__{}, ip.struct)
 
           {:DOWN, ^monitor_ref, _, _, reason} ->
+            Process.unalias(reply_alias)
             raise Flowex.PipelineError, pipeline: pipeline, reason: reason
         after
-          timeout ->
+          Flowex.Pipeline.remaining(deadline) ->
             Process.demonitor(monitor_ref, [:flush])
+            finish_timeout(pid, ip_ref, reply_alias, pipeline)
+        end
+      end
+
+      defp finish_timeout(pid, ip_ref, reply_alias, pipeline) do
+        # The reply may have beaten the clock to the mailbox: check for
+        # exactly this request's answer without consuming anything else.
+        receive do
+          %Flowex.IP{requester: ^pid, ref: ^ip_ref} = ip ->
+            Process.unalias(reply_alias)
+            Flowex.Pipeline.unwrap!(ip, pipeline)
+            struct(%__MODULE__{}, ip.struct)
+        after
+          0 ->
+            Process.unalias(reply_alias)
             raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
         end
       end
@@ -189,6 +259,7 @@ defmodule Flowex.Pipeline do
             pipeline = %Flowex.Pipeline{in_name: in_name, out_name: out_name},
             struct = %__MODULE__{}
           ) do
+        # Fire-and-forget: no reply destination, no deadline.
         ip = %Flowex.IP{struct: Map.delete(struct, :__struct__), requester: nil}
         GenServer.cast(out_name, {in_name, ip})
       end
