@@ -7,6 +7,57 @@ defmodule Flowex.PipelineBuilder do
   # the typos (count: 1000) loudly.
   @max_count 100
 
+  @doc """
+  Prepares the declared stages (FX-007): validates counts and prepares each
+  stage's options — a module stage's `init/1` runs here, in the starting
+  caller, once per declared occurrence. The prepared list is what the sync
+  engine executes; the async engine prepares per replica through the same
+  helpers. Prepared options are reused for every request and for
+  supervisor-driven restarts; initialization never runs per packet.
+  """
+  @spec prepare_stages(module(), map() | keyword()) :: [Flowex.StageOpts.t()]
+  def prepare_stages(pipeline_module, opts) do
+    Flowex.Pipeline.validate_opts!(pipeline_module, opts)
+
+    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
+    |> Enum.map(fn {atom, count, pipe_opts, type} ->
+      validate_count!(pipeline_module, atom, count)
+      prepare_stage(pipeline_module, atom, pipe_opts, type, opts)
+    end)
+  end
+
+  defp prepare_stage(pipeline_module, atom, pipe_opts, type, opts) do
+    merged = merge_opts(opts, pipe_opts)
+
+    case stage_kind(atom) do
+      :module ->
+        %Flowex.StageOpts{
+          type: type,
+          module: atom,
+          function: :call,
+          opts: prepare_module_opts(atom, merged)
+        }
+
+      :function ->
+        %Flowex.StageOpts{type: type, module: pipeline_module, function: atom, opts: merged}
+    end
+  end
+
+  defp stage_kind(atom) do
+    case Atom.to_charlist(atom) do
+      ~c"Elixir." ++ _ -> :module
+      _ -> :function
+    end
+  end
+
+  defp merge_opts(opts, pipe_opts), do: Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
+
+  defp prepare_module_opts(module, opts) do
+    opts = module.init(opts)
+    Flowex.Pipeline.validate_module_init!(module, opts)
+    opts
+  end
+
   @spec start(module(), map()) :: Flowex.Pipeline.t()
   def start(pipeline_module, opts) do
     {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
@@ -79,13 +130,14 @@ defmodule Flowex.PipelineBuilder do
     (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
     |> Enum.reduce({[producer_spec], [producer_name]}, fn {atom, count, pipe_opts, type},
                                                           {wss, prev_names} ->
-      opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
-
       validate_count!(pipeline_module, atom, count)
+      merged = merge_opts(opts, pipe_opts)
 
+      # The replica rule: each of a stage's count replicas runs module
+      # init/1 for its own options, at build time, in the starting caller.
       list =
         Enum.map(1..count, fn _i ->
-          init_pipe({pipeline_module, ref, opts}, {atom, type}, prev_names)
+          init_pipe({pipeline_module, ref, merged}, {atom, type}, prev_names)
         end)
 
       {new_wss, names} = Enum.unzip(list)
@@ -105,9 +157,9 @@ defmodule Flowex.PipelineBuilder do
   end
 
   def init_pipe({pipeline_module, ref, opts}, {atom, type}, prev_names) do
-    case Atom.to_charlist(atom) do
-      ~c"Elixir." ++ _ -> init_module_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
-      _ -> init_function_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
+    case stage_kind(atom) do
+      :module -> init_module_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
+      :function -> init_function_pipe({type, pipeline_module, ref, atom, opts}, prev_names)
     end
   end
 
@@ -128,8 +180,7 @@ defmodule Flowex.PipelineBuilder do
   end
 
   defp init_module_pipe({type, pipeline_module, ref, module, opts}, prev_names) do
-    opts = module.init(opts)
-    Flowex.Pipeline.validate_module_init!(module, opts)
+    opts = prepare_module_opts(module, opts)
 
     name = Flowex.Names.via(pipeline_module, ref, {:module_stage, make_ref()})
 
