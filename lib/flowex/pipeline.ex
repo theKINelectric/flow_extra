@@ -100,67 +100,39 @@ defmodule Flowex.Pipeline do
   end
 
   @doc """
-  The call prelude, shared by every pipeline module: resolves the consumer
-  once, arms the monitor and the revocable reply alias (FX-005), and takes
-  the admission permit BEFORE any packet exists (FX-001) — an overloaded
-  pipeline refuses here, observably, with no work begun.
+  The call prelude, shared by every pipeline module: arms the revocable
+  reply alias (FX-005), then hands the WHOLE packet to the admission
+  owner (FX-001) — reservation and forwarding are one transaction inside
+  the owner, so no caller death can strand a reserved permit without its
+  packet, and the submission's settling wait is bounded by this call's
+  own deadline (one budget, never reset). The consumer incarnation the
+  owner forwarded to is returned for the caller's monitor: one
+  incarnation for monitor and submission. Every refusal path revokes the
+  alias before it raises — cleanup is guaranteed on exceptional exits.
   """
-  @spec prepare_call(Flowex.Pipeline.t(), term(), term(), reference()) ::
-          {pid(), reference(), reference()}
-  def prepare_call(pipeline, out_name, owner_name, ip_ref) do
-    consumer_pid = resolve_consumer!(out_name, pipeline)
-    monitor_ref = Process.monitor(consumer_pid)
-    reply_alias = Process.alias()
+  @spec prepare_call(
+          Flowex.Pipeline.t(),
+          term(),
+          Flowex.IP.t(),
+          integer() | nil,
+          reference()
+        ) :: {pid(), reference()}
+  def prepare_call(pipeline, owner_name, ip, deadline, reply_alias) do
+    case Flowex.Admission.submit(owner_name, ip, deadline) do
+      {:ok, consumer_pid} ->
+        {consumer_pid, Process.monitor(consumer_pid)}
 
-    case Flowex.Admission.admit(owner_name, ip_ref) do
-      {:ok, _generation} ->
-        {consumer_pid, monitor_ref, reply_alias}
+      {:error, :deadline} ->
+        Process.unalias(reply_alias)
+        raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
+
+      {:error, :noprocess} ->
+        Process.unalias(reply_alias)
+        raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
 
       {:error, reason} ->
-        Process.demonitor(monitor_ref, [:flush])
         Process.unalias(reply_alias)
         raise Flowex.AdmissionError, pipeline: pipeline, reason: reason
-    end
-  end
-
-  @doc """
-  Resolves the consumer through the registry — the ONE resolution a call
-  makes (FX-005): the monitor and the submission both target this PID, so
-  a consumer restart mid-call cannot pair one incarnation's monitor with
-  another's work.
-
-  A consumer name that is absent while the pipeline's own supervisor still
-  exists means a restart is settling; the resolution waits it out briefly
-  so an honest restart surfaces as service and not as :noprocess. A
-  pipeline whose supervisor is gone refuses immediately.
-  """
-  @spec resolve_consumer!(term(), Flowex.Pipeline.t()) :: pid()
-  def resolve_consumer!(out_name, pipeline = %Flowex.Pipeline{sup_name: sup_name}) do
-    case GenServer.whereis(out_name) do
-      nil ->
-        if GenServer.whereis(sup_name) == nil do
-          raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
-        else
-          settle(out_name, sup_name, pipeline, System.monotonic_time(:millisecond) + 250)
-        end
-
-      pid ->
-        pid
-    end
-  end
-
-  defp settle(out_name, sup_name, pipeline, limit) do
-    case GenServer.whereis(out_name) do
-      nil ->
-        if System.monotonic_time(:millisecond) > limit do
-          raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
-        else
-          Process.sleep(2)
-          settle(out_name, sup_name, pipeline, limit)
-        end
-
-      pid ->
-        pid
     end
   end
 
@@ -251,25 +223,19 @@ defmodule Flowex.Pipeline do
   defp call_def do
     quote do
       def call(
-            pipeline = %Flowex.Pipeline{
-              in_name: in_name,
-              out_name: out_name,
-              owner_name: owner_name
-            },
+            pipeline = %Flowex.Pipeline{owner_name: owner_name},
             struct = %__MODULE__{},
             timeout \\ 5_000
           ) do
         pid = self()
         deadline = Flowex.Pipeline.deadline(timeout)
         ip_ref = make_ref()
+        reply_alias = Process.alias()
 
-        # One consumer incarnation for monitor and submission, a revocable
-        # reply alias, and admission before forwarding — the permit is
-        # reserved before the packet exists anywhere and held until the
-        # consumer releases it, past this caller's own timeout.
-        {consumer_pid, monitor_ref, reply_alias} =
-          Flowex.Pipeline.prepare_call(pipeline, out_name, owner_name, ip_ref)
-
+        # The whole packet — alias destination and deadline included — is
+        # submitted to the owner as one transaction; the permit is held
+        # from reservation to the consumer's terminal release, past this
+        # caller's own timeout.
         ip = %Flowex.IP{
           struct: Map.delete(struct, :__struct__),
           requester: pid,
@@ -278,7 +244,9 @@ defmodule Flowex.Pipeline do
           deadline: deadline
         }
 
-        GenServer.cast(consumer_pid, {in_name, ip})
+        {consumer_pid, monitor_ref} =
+          Flowex.Pipeline.prepare_call(pipeline, owner_name, ip, deadline, reply_alias)
+
         wait_response(pid, monitor_ref, ip_ref, reply_alias, pipeline, deadline)
       end
     end
@@ -306,8 +274,14 @@ defmodule Flowex.Pipeline do
             raise Flowex.PipelineError, pipeline: pipeline, reason: reason
         after
           Flowex.Pipeline.remaining(deadline) ->
+            # Revoke FIRST (FX-005 closure): from this line on the alias
+            # accepts no further delivery, closing the window in which a
+            # reply could land after the check but before the revocation
+            # and rot unread. A reply that already beat the clock is in
+            # the mailbox; the selective check below finds it.
             Process.demonitor(monitor_ref, [:flush])
-            finish_timeout(pid, ip_ref, reply_alias, pipeline)
+            Process.unalias(reply_alias)
+            finish_timeout(pid, ip_ref, pipeline)
         end
       end
     end
@@ -315,17 +289,16 @@ defmodule Flowex.Pipeline do
 
   defp finish_timeout_def do
     quote do
-      defp finish_timeout(pid, ip_ref, reply_alias, pipeline) do
-        # The reply may have beaten the clock to the mailbox: check for
-        # exactly this request's answer without consuming anything else.
+      defp finish_timeout(pid, ip_ref, pipeline) do
+        # The alias is revoked, so nothing new can arrive: check for
+        # exactly this request's already-delivered answer without
+        # consuming anything else.
         receive do
           %Flowex.IP{requester: ^pid, ref: ^ip_ref} = ip ->
-            Process.unalias(reply_alias)
             Flowex.Pipeline.unwrap!(ip, pipeline)
             struct(%__MODULE__{}, ip.struct)
         after
           0 ->
-            Process.unalias(reply_alias)
             raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
         end
       end
@@ -334,16 +307,10 @@ defmodule Flowex.Pipeline do
 
   defp cast_def do
     quote do
-      def cast(
-            pipeline = %Flowex.Pipeline{
-              in_name: in_name,
-              out_name: out_name,
-              owner_name: owner_name
-            },
-            struct = %__MODULE__{}
-          ) do
-        # Fire-and-forget: no reply destination, no deadline — but still
-        # admitted (FX-001): :ok now MEANS accepted-and-accounted-for. An
+      def cast(pipeline = %Flowex.Pipeline{owner_name: owner_name}, struct = %__MODULE__{}) do
+        # Fire-and-forget: no reply destination, no deadline — but the
+        # packet and its permit are submitted to the owner as one
+        # transaction (FX-001): :ok MEANS accepted-and-accounted-for. An
         # overloaded pipeline answers {:error, :overloaded} instead of
         # silently discarding the work later.
         ip = %Flowex.IP{
@@ -352,9 +319,8 @@ defmodule Flowex.Pipeline do
           ref: make_ref()
         }
 
-        case Flowex.Admission.admit(owner_name, ip.ref) do
-          {:ok, _generation} ->
-            GenServer.cast(out_name, {in_name, ip})
+        case Flowex.Admission.submit(owner_name, ip, nil) do
+          {:ok, _consumer_pid} ->
             :ok
 
           {:error, reason} ->
