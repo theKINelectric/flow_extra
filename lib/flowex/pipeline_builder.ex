@@ -64,55 +64,98 @@ defmodule Flowex.PipelineBuilder do
     opts
   end
 
+  # Default admitted-work capacity (FX-001): queued + executing packets
+  # together, deliberately far below GenStage's 10_000-event buffer.
+  @default_capacity 100
+
   @spec start(module(), map()) :: Flowex.Pipeline.t()
   def start(pipeline_module, opts) do
-    {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
+    {producer_name, consumer_name, wrapper_specs, ref, owner_name} =
+      build_children(pipeline_module, opts)
 
     sup_name = supervisor_name(pipeline_module, ref)
-    {:ok, _sup_pid} = Flowex.Supervisor.start_link(all_specs, sup_name)
+    {:ok, _sup_pid} = Flowex.Supervisor.start_link(wrapper_specs, sup_name)
 
-    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
+    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, nil, owner_name)
   end
 
   @spec supervised_start(module(), pid(), map()) :: Flowex.Pipeline.t()
   def supervised_start(pipeline_module, pid, opts) do
-    {producer_name, consumer_name, all_specs, ref} = build_children(pipeline_module, opts)
+    {producer_name, consumer_name, wrapper_specs, ref, owner_name} =
+      build_children(pipeline_module, opts)
 
     sup_name = supervisor_name(pipeline_module, ref)
 
     sup_spec = %{
       id: sup_name,
-      start: {Flowex.Supervisor, :start_link, [all_specs, sup_name]},
+      start: {Flowex.Supervisor, :start_link, [wrapper_specs, sup_name]},
       restart: :permanent,
       type: :supervisor
     }
 
     {:ok, _sup_pid} = Supervisor.start_child(pid, sup_spec)
-    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, pid)
+    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, pid, owner_name)
   end
 
   defp build_children(pipeline_module, opts) do
     Flowex.Pipeline.validate_opts!(pipeline_module, opts)
 
+    capacity = capacity!(pipeline_module, opts)
     ref = make_ref()
     producer_name = producer_name(pipeline_module, ref)
+    owner_name = Flowex.Names.via(pipeline_module, ref, :admission_owner)
+    line_name = Flowex.Names.via(pipeline_module, ref, :line)
 
     producer_spec = %{
       id: producer_name,
       start: {Flowex.Producer, :start_link, [nil, [name: producer_name]]}
     }
 
-    {wss, last_names} =
+    {stage_specs, last_names} =
       init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts})
 
     consumer_name = consumer_name(pipeline_module, ref)
 
     consumer_worker_spec = %{
       id: consumer_name,
-      start: {Flowex.Consumer, :start_link, [last_names, [name: consumer_name]]}
+      start: {Flowex.Consumer, :start_link, [last_names, owner_name, [name: consumer_name]]}
     }
 
-    {producer_name, consumer_name, wss ++ [consumer_worker_spec], ref}
+    # The line: producer, stages, consumer under the pipeline's own
+    # rest_for_one supervisor, exactly as before (init_pipes' accumulator
+    # already carries the producer spec at its head).
+    line_specs = stage_specs ++ [consumer_worker_spec]
+    worker_names = Enum.map(line_specs, & &1.id)
+
+    # The wrapper (FX-001, C design record): the admission owner FIRST, the
+    # line second, under rest_for_one — the owner's death tears the whole
+    # line down before a fresh owner can reopen capacity, and any line
+    # worker's death quiesces the owner's generation.
+    owner_spec = %{
+      id: owner_name,
+      start: {Flowex.Admission, :start_link, [capacity, worker_names, owner_name]}
+    }
+
+    line_sup_spec = %{
+      id: line_name,
+      start: {Flowex.Supervisor, :start_link, [line_specs, line_name]},
+      type: :supervisor
+    }
+
+    {producer_name, consumer_name, [owner_spec, line_sup_spec], ref, owner_name}
+  end
+
+  defp capacity!(pipeline_module, opts) do
+    opts = Enum.into(opts, %{})
+    capacity = Map.get(opts, :admission_capacity, @default_capacity)
+
+    if is_integer(capacity) and capacity >= 1 do
+      capacity
+    else
+      raise ArgumentError,
+            "pipeline #{inspect(pipeline_module)} declared admission_capacity " <>
+              "#{inspect(capacity)} — capacity must be a positive integer"
+    end
   end
 
   defp supervisor_name(pipeline_module, ref),
@@ -122,13 +165,21 @@ defmodule Flowex.PipelineBuilder do
 
   defp consumer_name(pipeline_module, ref), do: Flowex.Names.via(pipeline_module, ref, :consumer)
 
-  defp pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, parent \\ nil) do
+  defp pipeline_struct(
+         pipeline_module,
+         producer_name,
+         consumer_name,
+         sup_name,
+         parent,
+         owner_name
+       ) do
     %Flowex.Pipeline{
       module: pipeline_module,
       in_name: producer_name,
       out_name: consumer_name,
       sup_name: sup_name,
-      parent: parent
+      parent: parent,
+      owner_name: owner_name
     }
   end
 
