@@ -35,3 +35,9 @@ agree on Apache-2.0.
 ## Standing limitation
 
 `scripts/traps/*.sh` evidence files now embed the run's PID (`/tmp/fb_run$$._t7_compile.txt` …), so concurrent runs can no longer overwrite one another's receipts — the audit's fixed-filename concern, closed. The runtime-matrix limitation above remains the open item.
+
+## Closure additions (2026-09-27)
+
+- **The downstream artifact gate now exercises the pursuit E checklist in full:** startup, one successful pipeline (21 → 42), the error route (`:boom` recovered by the error pipe), and a deadline (`PipelineError :timeout` from a 10ms call at a 200ms stage — a raise, not a hang). All from the extracted artifact, on every suite run.
+- **Declared vs verified runtime is now separated in the README too:** 1.20.4/OTP 29 is stated as the only verified runtime; the inherited `~> 1.15` floor is explicitly marked not re-certified. The runtime matrix remains the open item (needs other toolchains or CI).
+- **The OTP restart-race finding is retained as a scoped observation** (see the C record): the pure-OTP probes that bisected it were throwaway and are not in this repository, so end-to-end restart determinism is not claimed from the `await_free!` polling helper alone; an in-repo reproducer remains open work.
