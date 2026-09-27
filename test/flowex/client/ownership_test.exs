@@ -14,7 +14,10 @@ defmodule Flowex.Client.OwnershipTest do
   included; expiry at dequeue refuses the request without invoking
   callbacks; the one-shot helper goes unless it has an isolation contract;
   the reusable client survives expected request failures and raises them
-  at the caller boundary.
+  at the caller boundary. Admission refusals are expected request failures
+  too (FX-001 closure): `call/3` raises `Flowex.AdmissionError` at the
+  boundary with the client alive, and `cast/2` reports the pipeline's
+  refusal instead of acknowledging a send the pipeline never accepted.
   """
 
   test "a caught call! timeout leaves no leaked helper behind" do
@@ -103,5 +106,56 @@ defmodule Flowex.Client.OwnershipTest do
     # budget reached the engine instead of being re-defaulted.
     assert %ClientSlowPipeline{} =
              Flowex.Client.call(client, %ClientSlowPipeline{number: 1}, 8_000)
+  end
+
+  test "an overload refusal raises AdmissionError at the boundary and the client survives" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+
+    assert :ok =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :held
+             })
+
+    assert_receive {:entered, :held, worker}
+    {:ok, client} = Flowex.Client.start(pipeline)
+    Process.unlink(client)
+
+    outcome =
+      try do
+        Flowex.Client.call(client, %AdmissionTrapPipeline{observer: self(), id: :refused}, 100)
+      rescue
+        e -> {:raised, e.__struct__}
+      catch
+        :exit, _ -> :exited
+      end
+
+    # The refusal is the caller's to see — raised, not a silent client
+    # exit — and the reusable client lives to serve again.
+    assert {outcome, Process.alive?(client)} == {{:raised, Flowex.AdmissionError}, true}
+
+    send(worker, :release)
+    assert_receive {:finished, :held}, 2_000
+    Flowex.Client.stop(client)
+  end
+
+  test "Client.cast reports the pipeline's admission refusal" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+
+    assert :ok =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :held
+             })
+
+    assert_receive {:entered, :held, worker}
+    {:ok, client} = Flowex.Client.start(pipeline)
+
+    assert {:error, :overloaded} =
+             Flowex.Client.cast(client, %AdmissionTrapPipeline{observer: self(), id: :refused})
+
+    send(worker, :release)
+    assert_receive {:finished, :held}, 2_000
+    Flowex.Client.stop(client)
   end
 end

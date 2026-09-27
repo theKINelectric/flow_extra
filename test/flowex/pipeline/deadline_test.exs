@@ -56,4 +56,27 @@ defmodule Flowex.Pipeline.DeadlineTest do
     assert %DeadlinePipeline{number: 1} =
              DeadlinePipeline.call(pipeline, %DeadlinePipeline{number: 1})
   end
+
+  test "the call's own deadline bounds the wait for admission" do
+    pipeline = DeadlinePipeline.start()
+    owner = GenServer.whereis(pipeline.owner_name)
+    :sys.suspend(owner)
+
+    task =
+      Task.async(fn ->
+        try do
+          DeadlinePipeline.call(pipeline, %DeadlinePipeline{number: 1}, 10)
+        rescue
+          e -> e
+        end
+      end)
+
+    # One budget from the public entry: queueing for admission counts
+    # against the caller's 10ms. The wait must end with the caller's own
+    # timeout — not outlive it behind a retry loop that resets its limit.
+    assert match?({:ok, %Flowex.PipelineError{reason: :timeout}}, Task.yield(task, 80))
+
+    :sys.resume(owner)
+    Task.shutdown(task, :brutal_kill)
+  end
 end
