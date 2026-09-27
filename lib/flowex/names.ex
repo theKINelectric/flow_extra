@@ -22,15 +22,28 @@ defmodule Flowex.Names do
   end
 
   @doc """
-  Stops a pipeline: workers first, then the supervisor. The one shared
-  implementation for both tracks (the parallel builder and the sync pipeline
-  carried duplicate copies of this logic).
+  Stops a pipeline through its owner (FX-003).
+
+  A supervised pipeline is a `restart: :permanent` child of the parent it
+  was started under, and the permanent contract restarts a child even after
+  normal termination — so `Supervisor.stop` on the pipeline supervisor just
+  gets resurrected. Intentional removal therefore goes through the owning
+  supervisor: terminate the child, then delete its spec. Abnormal exits are
+  untouched: the restart policy still answers crashes.
+
+  A standalone pipeline (no parent recorded) keeps the original shutdown:
+  workers first, then the supervisor.
   """
-  def stop_pipeline(%Flowex.Pipeline{sup_name: sup_name}) do
+  def stop_pipeline(%Flowex.Pipeline{sup_name: sup_name, parent: nil}) do
     Enum.each(Supervisor.which_children(sup_name), fn {id, _pid, :worker, [_]} ->
       Supervisor.terminate_child(sup_name, id)
     end)
 
     Supervisor.stop(sup_name)
+  end
+
+  def stop_pipeline(%Flowex.Pipeline{sup_name: sup_name, parent: parent}) when is_pid(parent) do
+    :ok = Supervisor.terminate_child(parent, sup_name)
+    :ok = Supervisor.delete_child(parent, sup_name)
   end
 end

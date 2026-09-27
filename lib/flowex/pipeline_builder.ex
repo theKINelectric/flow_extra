@@ -31,7 +31,7 @@ defmodule Flowex.PipelineBuilder do
     }
 
     {:ok, _sup_pid} = Supervisor.start_child(pid, sup_spec)
-    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name)
+    pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, pid)
   end
 
   defp build_children(pipeline_module, opts) do
@@ -65,12 +65,13 @@ defmodule Flowex.PipelineBuilder do
 
   defp consumer_name(pipeline_module, ref), do: Flowex.Names.via(pipeline_module, ref, :consumer)
 
-  defp pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name) do
+  defp pipeline_struct(pipeline_module, producer_name, consumer_name, sup_name, parent \\ nil) do
     %Flowex.Pipeline{
       module: pipeline_module,
       in_name: producer_name,
       out_name: consumer_name,
-      sup_name: sup_name
+      sup_name: sup_name,
+      parent: parent
     }
   end
 

@@ -5,10 +5,11 @@ defmodule Flowex.Pipeline do
           module: module(),
           in_name: term(),
           out_name: term(),
-          sup_name: term()
+          sup_name: term(),
+          parent: pid() | nil
         }
 
-  defstruct module: nil, in_name: nil, out_name: nil, sup_name: nil
+  defstruct module: nil, in_name: nil, out_name: nil, sup_name: nil, parent: nil
 
   defmacro pipe(atom, options \\ [opts: [], count: 1]) do
     count = options[:count] || 1
