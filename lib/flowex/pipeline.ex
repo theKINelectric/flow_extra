@@ -77,7 +77,7 @@ defmodule Flowex.Pipeline do
   @spec monitor_consumer!(term(), Flowex.Pipeline.t()) :: reference()
   def monitor_consumer!(out_name, pipeline) do
     case GenServer.whereis(out_name) do
-      nil -> raise Flowex.PipelineError, pipeline: pipeline, message: :noprocess
+      nil -> raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
       pid -> Process.monitor(pid)
     end
   end
@@ -154,11 +154,11 @@ defmodule Flowex.Pipeline do
             struct(%__MODULE__{}, ip.struct)
 
           {:DOWN, ^monitor_ref, _, _, reason} ->
-            raise Flowex.PipelineError, pipeline: pipeline, message: reason
+            raise Flowex.PipelineError, pipeline: pipeline, reason: reason
         after
           timeout ->
             Process.demonitor(monitor_ref, [:flush])
-            raise Flowex.PipelineError, pipeline: pipeline, message: :timeout
+            raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
         end
       end
 
