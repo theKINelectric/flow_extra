@@ -49,13 +49,17 @@ defmodule Flowex.Sync.GenServer do
       %{ip | error: error_struct}
   end
 
-  defp process(pipe, ip, pipeline_module, opts) do
-    {atom, _count, pipe_opts, type} = pipe
-
+  # Dispatch on stage type AND error state (FX-004), mirroring Flowex.Stage:
+  # a healthy packet skips the error track entirely, a failed packet skips
+  # the remaining normal pipes and reaches the error handler.
+  defp process({atom, _count, pipe_opts, type}, ip, pipeline_module, opts) do
     if ip.error do
       do_process_error(ip, pipeline_module, atom, {opts, pipe_opts}, type)
     else
-      do_process(ip, pipeline_module, atom, {opts, pipe_opts})
+      case type do
+        :error_pipe -> ip
+        :pipe -> do_process(ip, pipeline_module, atom, {opts, pipe_opts})
+      end
     end
   end
 
