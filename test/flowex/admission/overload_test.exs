@@ -11,9 +11,12 @@ defmodule Flowex.Admission.OverloadTest do
   the contract: a submission either acquires a permit or is refused
   observably; permits are held for the work's whole lifetime (a caller's
   timeout releases nothing); every admitted job reaches exactly one
-  terminal outcome; any topology failure quiesces its generation to
-  unknown — never an invented success or failure. The battery below is
-  Astra's decisive-test list plus the audit reproducer, reconciled.
+  terminal outcome; any topology failure quiesces its generation —
+  surviving work RETAINS its permit until its own terminal release, and
+  work destroyed with the topology stays admitted, outcome unknown: never
+  an invented success or failure, and never a slot reused under surviving
+  work. The battery below is Astra's decisive-test list plus the audit
+  reproducer, reconciled.
   """
 
   test "holds exactly K admitted jobs and refuses K+1 observably" do
@@ -109,46 +112,91 @@ defmodule Flowex.Admission.OverloadTest do
     assert {:ok, 1} = Flowex.Admission.admit(owner, make_ref())
   end
 
-  test "killing the consumer quiesces the generation to unknown and reopens" do
-    pipeline = ReplyTrapPipeline.start(%{admission_capacity: 3})
-    stage = suspend_work_stage!(pipeline)
+  test "old work surviving a consumer restart keeps its permit — no overlap onto it" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
 
     assert :ok =
-             ReplyTrapPipeline.cast(pipeline, %ReplyTrapPipeline{report_to: self(), ref: :old_one})
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :old
+             })
 
-    assert :ok =
-             ReplyTrapPipeline.cast(pipeline, %ReplyTrapPipeline{report_to: self(), ref: :old_two})
+    assert_receive {:entered, :old, worker}
+    Process.exit(GenServer.whereis(pipeline.out_name), :kill)
 
-    old_consumer = GenServer.whereis(pipeline.out_name)
-    Process.exit(old_consumer, :kill)
-
-    # The generation quiesces: outstanding work is unknown (never invented
-    # into success or failure), capacity is reclaimed, a fresh generation
-    # opens, and the stale releases of the dead generation cannot touch it.
+    # The generation quiesces and reopens — but the old work did not die
+    # with the consumer: it executes in the stage worker, and its permit
+    # stays occupied. Retention, not reuse: the reopened generation cannot
+    # double-book the slot under still-executing old work.
     wait_until(fn ->
       report = Flowex.Admission.report(pipeline.owner_name)
-      report.generation == 2 and report.status == :open
+      report.generation > 1 and report.status == :open
     end)
 
-    report = Flowex.Admission.report(pipeline.owner_name)
-    assert report.counts.unknown == 2
-    assert report.active == 0
+    assert Process.alive?(worker)
+
+    assert {:error, :overloaded} =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :new
+             })
+
+    # The survivor's terminal release frees the slot — across the
+    # generation boundary, exactly once, at the work's own completion.
+    send(worker, :release)
+    assert_receive {:finished, :old}, 2_000
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).active == 0 end)
+    assert Flowex.Admission.report(pipeline.owner_name).counts.succeeded == 1
 
     assert :ok =
-             ReplyTrapPipeline.cast(pipeline, %ReplyTrapPipeline{report_to: self(), ref: :fresh})
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :after
+             })
 
-    :sys.resume(stage)
+    assert_receive {:entered, :after, after_worker}, 2_000
+    send(after_worker, :release)
+    assert_receive {:finished, :after}, 2_000
+  end
 
-    # The fresh generation's work flows; the parked old packets complete
-    # too, but their releases are stale — no double counting anywhere.
-    assert_receive {:worked, :fresh}, 2_000
-    assert_receive {:worked, :old_one}, 2_000
-    assert_receive {:worked, :old_two}, 2_000
+  test "a caller that dies before its submission is processed reserves nothing" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    owner = GenServer.whereis(pipeline.owner_name)
+    :sys.suspend(owner)
 
-    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).active == 0 end)
-    report = Flowex.Admission.report(pipeline.owner_name)
-    assert report.counts.unknown == 2
-    assert report.counts.succeeded == 1
+    observer = self()
+
+    caller =
+      spawn(fn ->
+        AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+          observer: observer,
+          id: :orphan
+        })
+      end)
+
+    # The submission sits in the suspended owner's mailbox; the caller
+    # dies before it is ever processed. Reservation and forwarding are one
+    # transaction inside the owner — a dead caller reserves no permit and
+    # strands no accounting.
+    wait_until(fn ->
+      {:messages, messages} = Process.info(owner, :messages)
+      Enum.any?(messages, &match?({:"$gen_call", _, {:submit, _}}, &1))
+    end)
+
+    ref = Process.monitor(caller)
+    Process.exit(caller, :kill)
+    assert_receive {:DOWN, ^ref, _, _, :killed}
+    :sys.resume(owner)
+
+    assert Flowex.Admission.report(pipeline.owner_name).active == 0
+  end
+
+  test "the settling grace is one fixed budget — retries never reset it" do
+    {:ok, owner} = GenServer.start_link(Flowex.Admission, {1, [:astra_nonexistent_worker]})
+
+    task = Task.async(fn -> Flowex.Admission.admit(owner, make_ref()) end)
+    assert Task.yield(task, 500) == {:ok, {:error, :unavailable}}
+    Task.shutdown(task, :brutal_kill)
   end
 
   test "killing the owner tears down the line and reopens fresh, old work dead" do
