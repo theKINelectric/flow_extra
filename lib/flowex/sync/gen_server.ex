@@ -1,5 +1,10 @@
 defmodule Flowex.Sync.GenServer do
-  @moduledoc "Sync pipeline runner: one process, the line walked in a call."
+  @moduledoc """
+  Sync pipeline runner: one process, the line walked in a call. The state is
+  the prepared stage list (FX-007) — module `init/1` already ran in the
+  starting caller, so the walker reuses prepared options and never
+  initializes per request.
+  """
 
   use GenServer
 
@@ -8,27 +13,24 @@ defmodule Flowex.Sync.GenServer do
   end
 
   @impl true
-  def init(opts) do
-    {:ok, opts}
+  def init(prepared_stages) do
+    {:ok, prepared_stages}
   end
 
   @impl true
-  def handle_call(ip, _from, {pipeline_module, opts}) do
-    result = do_call(ip, {pipeline_module, opts})
-    {:reply, result, {pipeline_module, opts}}
+  def handle_call(ip, _from, prepared_stages) do
+    result = do_call(ip, prepared_stages)
+    {:reply, result, prepared_stages}
   end
 
   @impl true
-  def handle_cast(ip, {pipeline_module, opts}) do
-    do_call(ip, {pipeline_module, opts})
-    {:noreply, {pipeline_module, opts}}
+  def handle_cast(ip, prepared_stages) do
+    do_call(ip, prepared_stages)
+    {:noreply, prepared_stages}
   end
 
-  defp do_call(ip, {pipeline_module, opts}) do
-    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
-    |> Enum.reduce(ip, fn pipe, ip ->
-      process(pipe, ip, pipeline_module, opts)
-    end)
+  defp do_call(ip, prepared_stages) do
+    Enum.reduce(prepared_stages, ip, fn stage, ip -> process(stage, ip) end)
   end
 
   defp try_apply(ip, {module, function, pipe_opts}) do
@@ -52,49 +54,30 @@ defmodule Flowex.Sync.GenServer do
   # Dispatch on stage type AND error state (FX-004), mirroring Flowex.Stage:
   # a healthy packet skips the error track entirely, a failed packet skips
   # the remaining normal pipes and reaches the error handler.
-  defp process({atom, _count, pipe_opts, type}, ip, pipeline_module, opts) do
+  defp process(stage = %Flowex.StageOpts{type: type}, ip) do
     if ip.error do
-      do_process_error(ip, pipeline_module, atom, {opts, pipe_opts}, type)
+      do_process_error(ip, stage)
     else
       case type do
         :error_pipe -> ip
-        :pipe -> do_process(ip, pipeline_module, atom, {opts, pipe_opts})
+        :pipe -> do_process(ip, stage)
       end
     end
   end
 
-  defp do_process(ip, pipeline_module, atom, {opts, pipe_opts}) do
-    pipe_opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
-
-    case Atom.to_charlist(atom) do
-      ~c"Elixir." ++ _ ->
-        pipe_opts = atom.init(pipe_opts)
-        Flowex.Pipeline.validate_module_init!(atom, pipe_opts)
-        try_apply(ip, {atom, :call, pipe_opts})
-
-      _ ->
-        try_apply(ip, {pipeline_module, atom, pipe_opts})
-    end
+  defp do_process(ip, %Flowex.StageOpts{module: module, function: function, opts: opts}) do
+    try_apply(ip, {module, function, opts})
   end
 
-  defp do_process_error(ip, pipeline_module, atom, {opts, pipe_opts}, :error_pipe) do
-    pipe_opts = Map.merge(Enum.into(opts, %{}), Enum.into(pipe_opts, %{}))
-
-    result =
-      case Atom.to_charlist(atom) do
-        ~c"Elixir." ++ _ ->
-          pipe_opts = atom.init(pipe_opts)
-          Flowex.Pipeline.validate_module_init!(atom, pipe_opts)
-          struct = struct(atom, ip.struct)
-          atom.call(ip.error, struct, pipe_opts)
-
-        _ ->
-          struct = struct(pipeline_module, ip.struct)
-          apply(pipeline_module, atom, [ip.error, struct, pipe_opts])
-      end
-
+  # Function and module error handlers unify here: a prepared function stage
+  # carries {pipeline_module, :handle_error}, a module stage {module, :call}
+  # — both three-argument, both seeing their own module's struct.
+  defp do_process_error(ip, stage = %Flowex.StageOpts{type: :error_pipe}) do
+    %{module: module, function: function, opts: opts} = stage
+    struct = struct(module, ip.struct)
+    result = apply(module, function, [ip.error, struct, opts])
     %{ip | struct: Map.merge(ip.struct, Map.delete(result, :__struct__))}
   end
 
-  defp do_process_error(ip, _pipeline_module, _atom, _opts, :pipe), do: ip
+  defp do_process_error(ip, %Flowex.StageOpts{type: :pipe}), do: ip
 end

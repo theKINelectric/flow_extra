@@ -4,6 +4,7 @@ defmodule Flowex.Sync.Pipeline do
   defmacro __using__(_args) do
     quote do
       import Flowex.Pipeline
+      alias Flowex.PipelineBuilder
 
       Module.register_attribute(__MODULE__, :pipes, accumulate: true)
       Module.register_attribute(__MODULE__, :error_pipe, accumulate: false)
@@ -16,11 +17,11 @@ defmodule Flowex.Sync.Pipeline do
 
       def start(opts \\ %{}) do
         opts = init(opts)
-        Flowex.Pipeline.validate_opts!(__MODULE__, opts)
+        prepared = PipelineBuilder.prepare_stages(__MODULE__, opts)
 
         ref = make_ref()
         name = supervisor_name(__MODULE__, ref)
-        {:ok, sup_pid} = Flowex.Sync.Supervisor.start_link(__MODULE__, ref, name, opts)
+        {:ok, sup_pid} = Flowex.Sync.Supervisor.start_link(__MODULE__, ref, name, prepared)
         do_start(sup_pid, name)
       end
 
@@ -29,20 +30,21 @@ defmodule Flowex.Sync.Pipeline do
       end
 
       # One admission law, both doors (FX-002): init/1 runs exactly once, in
-      # the caller, and its result is validated there — a raise inside a
-      # child's start_link under Supervisor.start_child would surface as
-      # {:error, _}, not as the caller's ArgumentError. The prepared opts are
-      # baked into the child spec, so a restart reuses them.
+      # the caller, and preparation validates its result there — a raise
+      # inside a child's start_link under Supervisor.start_child would
+      # surface as {:error, _}, not as the caller's ArgumentError. The
+      # prepared stages are baked into the child spec (FX-007), so a restart
+      # reuses them — module init/1 never runs per request.
       def supervised_start(pid, opts \\ %{}) do
         opts = init(opts)
-        Flowex.Pipeline.validate_opts!(__MODULE__, opts)
+        prepared = PipelineBuilder.prepare_stages(__MODULE__, opts)
 
         ref = make_ref()
         name = supervisor_name(__MODULE__, ref)
 
         sup_spec = %{
           id: name,
-          start: {Flowex.Sync.Supervisor, :start_link, [__MODULE__, ref, name, opts]},
+          start: {Flowex.Sync.Supervisor, :start_link, [__MODULE__, ref, name, prepared]},
           restart: :permanent,
           type: :supervisor
         }
