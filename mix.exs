@@ -4,7 +4,9 @@ defmodule Flowex.Mixfile do
   def project do
     [
       app: :flowex,
-      version: "0.5.4",
+      # 0.6.0: the fork's own line — admission protocol, one-deadline calls,
+      # supervised stop semantics; cast/2's refusal return is breaking.
+      version: "0.6.0",
       # Honest floor: every dep in every env resolves on 1.15+ (ex_doc is the
       # binding constraint; gen_stage needs ~> 1.11, credo >= 1.13).
       elixir: "~> 1.15",
@@ -13,7 +15,7 @@ defmodule Flowex.Mixfile do
       deps: deps(),
       description: description(),
       package: package(),
-      source_url: "https://github.com/antonmi/flowex"
+      source_url: "https://codeberg.org/kin_electric/flowex"
     ]
   end
 
@@ -45,12 +47,17 @@ defmodule Flowex.Mixfile do
     [
       # The artifact must carry what consumers need downstream (FX-009): the
       # formatter export (import_deps: [:flowex]), the license notice, and
-      # the README's figures. License METADATA below stays as-is — which
-      # declaration is authoritative is a human provenance decision.
+      # the README's figures. Apache-2.0 is upstream's own LICENSE (Anton
+      # Mishchuk, 2017 — d78a761, tagged v0.5.1), verified present at the
+      # fork point and at upstream master; the inherited "MIT" hex metadata
+      # contradicted the author's own file and is not carried forward.
       files: ~w(lib mix.exs README.md .formatter.exs LICENSE figures),
-      maintainers: ["Anton Mishchuk"],
-      licenses: ["MIT"],
-      links: %{"github" => "https://github.com/antonmi/flowex"}
+      maintainers: ["Anton Mishchuk", "kin_electric"],
+      licenses: ["Apache-2.0"],
+      links: %{
+        "Codeberg" => "https://codeberg.org/kin_electric/flowex",
+        "GitHub (upstream)" => "https://github.com/antonmi/flowex"
+      }
     ]
   end
 end
