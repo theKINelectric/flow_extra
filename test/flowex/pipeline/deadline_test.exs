@@ -40,7 +40,14 @@ defmodule Flowex.Pipeline.DeadlineTest do
     pipeline = DeadlinePipeline.start()
     {:ok, client} = Flowex.Client.start(pipeline)
 
-    assert catch_exit(Flowex.Client.call(client, %DeadlinePipeline{number: 1}, 50))
+    # FX-006: an expected request failure raises at the caller boundary —
+    # the client's own exit was the old, leaked presentation.
+    error =
+      assert_raise Flowex.PipelineError, fn ->
+        Flowex.Client.call(client, %DeadlinePipeline{number: 1}, 50)
+      end
+
+    assert error.reason == :timeout
   end
 
   test "the default deadline leaves generous calls alone" do
