@@ -180,7 +180,7 @@ defmodule Flowex.Admission.OverloadTest do
     # strands no accounting.
     wait_until(fn ->
       {:messages, messages} = Process.info(owner, :messages)
-      Enum.any?(messages, &match?({:"$gen_call", _, {:submit, _}}, &1))
+      Enum.any?(messages, &match?({:"$gen_call", _, {:submit, _, _}}, &1))
     end)
 
     ref = Process.monitor(caller)
@@ -288,9 +288,61 @@ defmodule Flowex.Admission.OverloadTest do
     send(caller, :stop)
   end
 
+  test "the documented recovery: stop and restart reclaims an unresolved reservation" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+
+    assert :ok =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :stuck
+             })
+
+    assert_receive {:entered, :stuck, worker}
+
+    # Destroy the packet mid-callback: its permit has no terminal release
+    # coming — an unresolved reservation that holds the pipeline's one
+    # slot (the availability cost of retention, made visible).
+    Process.exit(worker, :kill)
+
+    wait_until(fn ->
+      report = Flowex.Admission.report(pipeline.owner_name)
+      report.status == :open and report.active == 1
+    end)
+
+    assert {:error, :overloaded} =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :blocked
+             })
+
+    refute_receive {:finished, :stuck}, 150
+
+    # The procedure: confirmed termination of the complete execution
+    # generation — stop the pipeline, start it again. Nothing of the old
+    # line survives the stop, so reclaiming the ledger with it is safe;
+    # the fresh pipeline admits normally.
+    AdmissionTrapPipeline.stop(pipeline)
+
+    fresh = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+
+    assert :ok =
+             AdmissionTrapPipeline.cast(fresh, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :recovered
+             })
+
+    assert_receive {:entered, :recovered, fresh_worker}, 2_000
+    send(fresh_worker, :release)
+    assert_receive {:finished, :recovered}, 2_000
+  end
+
   test "reattachment watches each worker exactly once — no monitor accumulation" do
     pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
     owner = GenServer.whereis(pipeline.owner_name)
+    # The kill must be SEEN by an attached owner: a kill that beats the
+    # boot-time attach is not a topology failure at all.
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
 
     count = fn ->
       {:monitors, monitors} = Process.info(owner, :monitors)

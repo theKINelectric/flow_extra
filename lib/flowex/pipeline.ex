@@ -105,10 +105,11 @@ defmodule Flowex.Pipeline do
   owner (FX-001) — reservation and forwarding are one transaction inside
   the owner, so no caller death can strand a reserved permit without its
   packet, and the submission's settling wait is bounded by this call's
-  own deadline (one budget, never reset). The consumer incarnation the
-  owner forwarded to is returned for the caller's monitor: one
-  incarnation for monitor and submission. Every refusal path revokes the
-  alias before it raises — cleanup is guaranteed on exceptional exits.
+  own deadline (one budget, never reset, checked again at dequeue). The
+  consumer incarnation the owner forwarded to is returned for the
+  caller's monitor: one incarnation for monitor and submission. Every
+  refusal path revokes the alias before it raises — cleanup is
+  guaranteed on exceptional exits.
   """
   @spec prepare_call(
           Flowex.Pipeline.t(),
@@ -122,19 +123,33 @@ defmodule Flowex.Pipeline do
       {:ok, consumer_pid} ->
         {consumer_pid, Process.monitor(consumer_pid)}
 
-      {:error, :deadline} ->
-        Process.unalias(reply_alias)
-        raise Flowex.PipelineError, pipeline: pipeline, reason: :timeout
-
-      {:error, :noprocess} ->
-        Process.unalias(reply_alias)
-        raise Flowex.PipelineError, pipeline: pipeline, reason: :noprocess
-
       {:error, reason} ->
         Process.unalias(reply_alias)
-        raise Flowex.AdmissionError, pipeline: pipeline, reason: reason
+        refuse!(pipeline, reason)
     end
   end
+
+  # An uncertain :unavailable (acknowledgment timed out — see
+  # Flowex.Admission.submit/3) carries the request identity into the
+  # raise; every definite refusal is flat.
+  defp refuse!(pipeline, {:unavailable, request_ref}) when is_reference(request_ref) do
+    raise Flowex.AdmissionError,
+      pipeline: pipeline,
+      reason: :unavailable,
+      request_ref: request_ref
+  end
+
+  defp refuse!(pipeline, {:unavailable, nil}),
+    do: raise(Flowex.AdmissionError, pipeline: pipeline, reason: :unavailable)
+
+  defp refuse!(pipeline, :deadline),
+    do: raise(Flowex.PipelineError, pipeline: pipeline, reason: :timeout)
+
+  defp refuse!(pipeline, :noprocess),
+    do: raise(Flowex.PipelineError, pipeline: pipeline, reason: :noprocess)
+
+  defp refuse!(pipeline, reason),
+    do: raise(Flowex.AdmissionError, pipeline: pipeline, reason: reason)
 
   @doc """
   The absolute local monotonic deadline (milliseconds) for a call timeout;
@@ -322,6 +337,12 @@ defmodule Flowex.Pipeline do
         case Flowex.Admission.submit(owner_name, ip, nil) do
           {:ok, _consumer_pid} ->
             :ok
+
+          # The public shape stays flat: the uncertainty identity is
+          # reconcilable by business identity (the struct the caller
+          # built) and by the report's :refs for diagnosis.
+          {:error, {:unavailable, _identity}} ->
+            {:error, :unavailable}
 
           {:error, reason} ->
             {:error, reason}

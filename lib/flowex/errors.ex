@@ -42,21 +42,34 @@ end
 defmodule Flowex.AdmissionError do
   @moduledoc """
   The pipeline refused the request before admission (FX-001): its
-  admitted-work capacity is exhausted (`:overloaded`), or its topology is
-  settling after a failure and asked the caller to retry
-  (`:unavailable`). No permit was taken and no work began — this is a
-  policy outcome, not a pipeline failure.
+  admitted-work capacity is exhausted (`:overloaded`), or admission was
+  not confirmed within the submission's own budget (`:unavailable`).
+
+  `:unavailable` is honest about its certainty. A refusal the owner
+  explicitly returned — settling, or expired at dequeue — is definite:
+  no permit was taken and no work began. `request_ref` being set marks
+  an outcome the caller learned by its acknowledgment timing out: the
+  submission may have been admitted in the last instant before the
+  reply was lost. Reconcile it with `Flowex.Admission.report/1` (the
+  `:refs` list) using that reference. This is a policy outcome, not a
+  pipeline failure.
   """
 
-  defexception pipeline: nil, reason: nil
+  defexception pipeline: nil, reason: nil, request_ref: nil
 
   @impl true
   def message(error = %__MODULE__{reason: :overloaded}) do
     "Flowex pipeline #{describe(error)} is at its admitted-work capacity — refused before admission"
   end
 
+  def message(error = %__MODULE__{reason: :unavailable, request_ref: nil}) do
+    "Flowex pipeline #{describe(error)} did not confirm admission within the submission budget — refused before admission, retry"
+  end
+
   def message(error = %__MODULE__{reason: :unavailable}) do
-    "Flowex pipeline #{describe(error)} is settling after a topology failure — refused before admission, retry"
+    "Flowex pipeline #{describe(error)} did not confirm admission within the submission budget — " <>
+      "it may have been admitted at the boundary (request #{inspect(error.request_ref)}); " <>
+      "reconcile with Flowex.Admission.report/1"
   end
 
   def message(error = %__MODULE__{reason: reason}) do

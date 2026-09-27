@@ -30,6 +30,11 @@ defmodule Flowex.Admission do
   # Capacity refusals are never retried.
   @settle_grace 250
   @attach_step 5
+  # How long a caller whose budget has expired keeps waiting for the
+  # acknowledgment: a reply already on its way converts would-be
+  # uncertainty into a definite answer (and a late acceptance into the
+  # ordinary timeout contract instead of a phantom refusal).
+  @ack_slack 25
 
   @type outcome :: :succeeded | :recovered | :expired | :failed | :cancelled | :unknown
 
@@ -49,28 +54,55 @@ defmodule Flowex.Admission do
 
   While the topology settles, the attempt retries against ONE fixed
   budget: the caller's `deadline` when given (the call's clock is the
-  admission's clock), capped by the settling grace. `{:error, :deadline}`
-  means the caller's own budget ran out; `{:error, :unavailable}` means
-  the grace did; `{:error, :overloaded}` is immediate — capacity, no
-  retry; `{:error, :noprocess}` means the owner (and with it the line)
-  is gone.
+  admission's clock), capped by the settling grace. That budget travels
+  IN the submission envelope and is checked at dequeue — a submission the
+  caller has already been refused for (its budget expired waiting for the
+  acknowledgment) is refused again by the owner, never forwarded, never
+  executed after the fact.
+
+  Refusal certainty: `{:error, :overloaded}` is immediate and definite;
+  `{:error, {:unavailable, nil}}` is an explicit owner refusal — settling,
+  or expired at dequeue — and definite; `{:error, {:unavailable, ref}}`
+  marks an outcome learned by the acknowledgment timing out, where the
+  submission may have been admitted in the last instant before the reply
+  was lost — the `ref` identifies it for reconciliation against the
+  `:refs` list of `report/1`. `{:error, :deadline}` is the caller's own
+  budget, whose residual uncertainty is the ordinary timeout contract
+  (execution may continue past a caller's deadline); `{:error,
+  :noprocess}` means the owner (and with it the line) is gone.
   """
   @spec submit(GenServer.name(), Flowex.IP.t(), integer() | nil) ::
           {:ok, pid()}
-          | {:error, :overloaded | :unavailable | :deadline | :noprocess | :caller_dead}
+          | {:error, :overloaded}
+          | {:error, {:unavailable, reference() | nil}}
+          | {:error, :deadline}
+          | {:error, :noprocess}
   def submit(owner, ip, deadline \\ nil) do
-    attempt(owner, {:submit, ip}, deadline)
+    started = System.monotonic_time(:millisecond)
+    grace_end = started + @settle_grace
+
+    if deadline && deadline < grace_end do
+      ask(owner, {:submit, ip, deadline}, deadline, :deadline, ip.ref)
+    else
+      ask(owner, {:submit, ip, grace_end}, grace_end, :unavailable, ip.ref)
+    end
   end
 
   @doc """
   Reserves a permit for `id` without a packet — a diagnostic for ledger
   and reconciliation probes; the engine paths use `submit/3`. Refusal
-  semantics as `submit/3`, with the settling grace as the whole budget.
+  semantics as `submit/3` with the settling grace as the whole budget,
+  flattened to `{:error, :unavailable}`.
   """
   @spec admit(GenServer.name(), reference()) ::
           {:ok, integer()} | {:error, :overloaded | :unavailable | :noprocess}
   def admit(owner, id) do
-    attempt(owner, {:admit, id}, nil)
+    budget_end = System.monotonic_time(:millisecond) + @settle_grace
+
+    case ask(owner, {:admit, id}, budget_end, :unavailable, nil) do
+      {:error, {:unavailable, _identity}} -> {:error, :unavailable}
+      other -> other
+    end
   end
 
   @doc """
@@ -84,11 +116,19 @@ defmodule Flowex.Admission do
     GenServer.call(owner, {:release, id, outcome})
   end
 
-  @doc "The generation's ledger, for diagnostics and reconciliation tests."
+  @doc """
+  The generation's ledger, for diagnostics and reconciliation tests.
+  `active` counts unresolved reservations — queued and executing work,
+  and work destroyed with the topology whose outcome is unknown until
+  the pipeline is restarted; `refs` exposes those reservations'
+  identities so a caller holding an uncertain admission outcome can
+  reconcile it.
+  """
   @spec report(GenServer.name()) :: %{
           required(:generation) => integer(),
           required(:capacity) => pos_integer(),
           required(:active) => non_neg_integer(),
+          required(:refs) => [reference()],
           required(:status) => :open | :settling,
           required(:counts) => %{optional(outcome()) => non_neg_integer()}
         }
@@ -96,41 +136,50 @@ defmodule Flowex.Admission do
     GenServer.call(owner, :report)
   end
 
-  defp attempt(owner, msg, deadline) do
-    started = System.monotonic_time(:millisecond)
-    grace_end = started + @settle_grace
-
-    if deadline && deadline < grace_end do
-      ask(owner, msg, deadline, :deadline)
-    else
-      ask(owner, msg, grace_end, :unavailable)
-    end
-  end
-
-  defp ask(owner, msg, budget_end, bound) do
+  defp ask(owner, msg, budget_end, bound, identity) do
     remaining = budget_end - System.monotonic_time(:millisecond)
 
     if remaining <= 0 do
-      {:error, bound}
+      # The budget died without another attempt: nothing new was sent, so
+      # the refusal is definite.
+      {:error, definite(bound)}
     else
       try do
-        case GenServer.call(owner, msg, remaining + 1) do
-          {:error, :unavailable} ->
-            Process.sleep(min(@attach_step, remaining))
-            ask(owner, msg, budget_end, bound)
-
-          reply ->
-            reply
-        end
+        GenServer.call(owner, msg, remaining + @ack_slack)
       catch
-        # GenServer.call exits with a wrapped reason on timeout — the
-        # caller's budget is spent, not the owner gone.
-        :exit, :timeout -> {:error, bound}
-        :exit, {:timeout, {GenServer, :call, _}} -> {:error, bound}
+        # GenServer.call exits with a wrapped reason on timeout. The
+        # acknowledgment never came: the submission may still be queued,
+        # so the outcome is uncertain — the dequeue deadline check is
+        # what keeps it from executing, and the identity is what lets
+        # the caller reconcile the residual race.
+        :exit, :timeout -> {:error, uncertain(bound, identity)}
+        :exit, {:timeout, {GenServer, :call, _}} -> {:error, uncertain(bound, identity)}
         :exit, _gone -> {:error, :noprocess}
+      else
+        {:error, :unavailable} ->
+          if System.monotonic_time(:millisecond) < budget_end do
+            Process.sleep(min(@attach_step, budget_end - System.monotonic_time(:millisecond)))
+            ask(owner, msg, budget_end, bound, identity)
+          else
+            # The owner itself refused, after the budget's end: definite.
+            {:error, definite(bound)}
+          end
+
+        reply ->
+          reply
       end
     end
   end
+
+  defp definite(:unavailable), do: {:unavailable, nil}
+  defp definite(:deadline), do: :deadline
+
+  defp uncertain(:unavailable, identity), do: {:unavailable, identity}
+
+  # A deadline-bound wait that never got acknowledged has the ordinary
+  # timeout contract as its residual: execution may continue past a
+  # caller's deadline, so :timeout is already the honest report.
+  defp uncertain(:deadline, _identity), do: :deadline
 
   @impl true
   def init({capacity, worker_names}), do: init({capacity, worker_names, nil})
@@ -163,8 +212,7 @@ defmodule Flowex.Admission do
     pids = state.worker_names |> Enum.map(&GenServer.whereis/1) |> Enum.uniq()
 
     if pids != [] and Enum.all?(pids, &is_pid/1) do
-      monitors = for pid <- pids, into: %{}, do: {Process.monitor(pid), pid}
-      {:noreply, %{state | monitors: monitors, status: :open}}
+      {:noreply, %{state | monitors: reattach(state.monitors, pids), status: :open}}
     else
       Process.send_after(self(), :attach, @attach_step)
       {:noreply, state}
@@ -201,6 +249,27 @@ defmodule Flowex.Admission do
     end
   end
 
+  # Survivors keep their monitors; gone incarnations are demonitored and
+  # flushed; only genuinely new incarnations get a fresh monitor — the
+  # watched set never accumulates stale references across restarts.
+  defp reattach(monitors, pids) do
+    watched = MapSet.new(pids)
+
+    {kept, stale} =
+      Enum.split_with(monitors, fn {_ref, pid} -> MapSet.member?(watched, pid) end)
+
+    for {ref, _pid} <- stale, do: Process.demonitor(ref, [:flush])
+
+    monitored = MapSet.new(monitors, fn {_ref, pid} -> pid end)
+
+    fresh =
+      for pid <- pids, not MapSet.member?(monitored, pid), into: %{} do
+        {Process.monitor(pid), pid}
+      end
+
+    Map.merge(Map.new(kept), fresh)
+  end
+
   @impl true
   def handle_call(:report, _from, state) do
     {:reply,
@@ -208,13 +277,21 @@ defmodule Flowex.Admission do
        generation: state.generation,
        capacity: state.capacity,
        active: map_size(state.active),
+       refs: Map.keys(state.active),
        status: state.status,
        counts: state.counts
      }, state}
   end
 
-  def handle_call({:submit, ip}, {caller, _ref}, state) do
+  def handle_call({:submit, ip, admission_deadline}, {caller, _ref}, state) do
     cond do
+      # Refused at dequeue: this attempt's own admission deadline died
+      # while the request waited — the caller has already been refused,
+      # so no reservation, no forwarding, no execution behind the refusal.
+      # (The packet's execution deadline is a separate, later boundary.)
+      Flowex.Pipeline.expired?(admission_deadline) ->
+        {:reply, {:error, :unavailable}, state}
+
       state.status != :open ->
         {:reply, {:error, :unavailable}, state}
 
@@ -267,7 +344,10 @@ defmodule Flowex.Admission do
         {:reply, {:error, :unavailable}, state}
 
       consumer_pid ->
-        GenServer.cast(out_name, {in_name, ip})
+        # The resolved incarnation is both the delivery target and the
+        # identity handed back for the caller's monitor — they cannot
+        # disagree, whatever a restart does between them.
+        GenServer.cast(consumer_pid, {in_name, ip})
         active = Map.put(state.active, ip.ref, state.generation)
         {:reply, {:ok, consumer_pid}, %{state | active: active}}
     end
