@@ -231,7 +231,7 @@ FunPipeline.cast(pipeline, %FunPipeline{number: 2})
 # :ok — accepted and accounted for — or {:error, :overloaded}
 ```
 
-`cast/2` returning `:ok` therefore **means the work is admitted**: it will be accounted to a terminal outcome (`Flowex.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission. If a worker dies, in-flight calls fail (the consumer's death trips their monitors) while the generation quiesces: work that survives the failure keeps executing and **keeps its capacity** until its own terminal release — the reopened pipeline never double-books a slot under still-running old work — and work destroyed with the failure stays admitted, outcome unknown: never an invented success or failure, recoverable by restarting the pipeline. A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
+`cast/2` returning `:ok` therefore **means the work is admitted**: it will be accounted to a terminal outcome (`Flowex.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission — a submission whose acknowledgment outlives that budget is refused again at dequeue, so a reported refusal never executes afterward. An `:unavailable` the caller learned from a missing acknowledgment is honestly uncertain rather than a proven never-admitted: the raised `Flowex.AdmissionError` carries the request reference, and `report/1`'s `:refs` lists unresolved reservations for reconciliation. If a worker dies, in-flight calls fail (the consumer's death trips their monitors) while the generation quiesces: work that survives the failure keeps executing and **keeps its capacity** until its own terminal release — the reopened pipeline never double-books a slot under still-running old work — and work destroyed with the failure stays admitted, outcome unknown: never an invented success or failure, recoverable by stopping and restarting the pipeline (a confirmed termination of the whole execution generation). A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
 
 ## Run via client
 Another way is using `Flowex.Client` module which implements GenServer behavior.
@@ -265,8 +265,8 @@ The things happen when you call `Flowex.Client.call` (synchronous):
 - when the consumer receives the Information Packet (IP), it sends it back to the client which sends it back to the caller process.
 
 The things happen when you `cast` pipeline (asynchronous):
-- `self` process makes `cast` call to the client and immediately receives `:ok`
-- the client makes `cast` to pipeline;
+- `self` process makes a call to the client and receives the pipeline's own answer: `:ok` — the work was admitted and accounted for — or `{:error, :overloaded}` / `{:error, :unavailable}` when the pipeline refused it;
+- the client submits the struct to the pipeline's admission owner (reservation and forwarding are one transaction);
 - the struct is wrapped into `%Flowex.IP{}` struct and begins its asynchronous journey from one GenStage to another;
 - consumer does not send data back, because this is `cast`
 

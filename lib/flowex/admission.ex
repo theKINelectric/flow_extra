@@ -6,15 +6,21 @@ defmodule Flowex.Admission do
   The contract, in brief — a submission is one transaction: the owner
   reserves the permit AND forwards the packet (`submit/3`), so no caller
   death can strand a reservation without its packet. A submission either
-  acquires a permit (the work WILL be accounted to a terminal outcome) or
-  is refused immediately and observably. Permits are held for the work's
-  whole lifetime: a caller's timeout or death releases nothing, and a
-  topology failure RETAINS its generation's permits — surviving work
-  keeps executing and keeps its capacity until its own terminal release,
-  while work destroyed with the topology stays admitted, outcome unknown.
-  Nothing is invented into success or failure, and no slot is reused
-  under surviving work. Every admitted job reaches exactly one terminal
-  outcome. See `docs/research/flowex/C-admission-design.md`.
+  acquires a permit (the work WILL be accounted to a terminal outcome)
+  or is refused observably — and a refusal the caller has received is
+  enforced again at dequeue, so refused-looking submissions never
+  execute afterward. Permits are held for the work's whole lifetime: a
+  caller's timeout or death releases nothing, and a topology failure
+  RETAINS its generation's permits — surviving work keeps executing and
+  keeps its capacity until its own terminal release, while work
+  destroyed with the topology stays admitted, outcome unknown. Nothing
+  is invented into success or failure, and no slot is reused under
+  surviving work. Every admitted job is either released to exactly one
+  terminal outcome or remains an unresolved reservation — reported
+  `active`, outcome unknown — until the pipeline is restarted
+  (retention with manual recovery: stop and start again, a confirmed
+  termination of the whole execution generation). See
+  `docs/research/flowex/C-admission-design.md`.
 
   The owner monitors every line worker. Any worker death quiesces the
   generation; because the wrapper supervisor is `:rest_for_one` with the
