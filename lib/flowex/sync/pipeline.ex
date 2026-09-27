@@ -16,6 +16,8 @@ defmodule Flowex.Sync.Pipeline do
 
       def start(opts \\ %{}) do
         opts = init(opts)
+        Flowex.Pipeline.validate_opts!(__MODULE__, opts)
+
         ref = make_ref()
         name = supervisor_name(__MODULE__, ref)
         {:ok, sup_pid} = Flowex.Sync.Supervisor.start_link(__MODULE__, ref, name, opts)
@@ -26,7 +28,15 @@ defmodule Flowex.Sync.Pipeline do
         Flowex.Names.stop_pipeline(pipeline)
       end
 
+      # One admission law, both doors (FX-002): init/1 runs exactly once, in
+      # the caller, and its result is validated there — a raise inside a
+      # child's start_link under Supervisor.start_child would surface as
+      # {:error, _}, not as the caller's ArgumentError. The prepared opts are
+      # baked into the child spec, so a restart reuses them.
       def supervised_start(pid, opts \\ %{}) do
+        opts = init(opts)
+        Flowex.Pipeline.validate_opts!(__MODULE__, opts)
+
         ref = make_ref()
         name = supervisor_name(__MODULE__, ref)
 

@@ -48,7 +48,12 @@ defmodule Flowex.Pipeline do
         PipelineBuilder.start(__MODULE__, opts)
       end
 
+      # One admission law, both doors (FX-002): init/1 runs exactly once, in
+      # the caller, whichever way the pipeline enters the world. The prepared
+      # opts are baked into the child specs, so a supervisor-driven restart
+      # reuses them — init does not run again on restart.
       def supervised_start(pid, opts \\ %{}) do
+        opts = init(opts)
         PipelineBuilder.supervised_start(__MODULE__, pid, opts)
       end
 
