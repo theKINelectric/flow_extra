@@ -19,9 +19,15 @@ defmodule Flowex.PipelineBuilder do
   def prepare_stages(pipeline_module, opts) do
     Flowex.Pipeline.validate_opts!(pipeline_module, opts)
 
-    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
-    |> Enum.map(fn {atom, count, pipe_opts, type} ->
+    declarations = pipeline_module.pipes() ++ [pipeline_module.error_pipe()]
+
+    # Validate the whole declaration before any module initializer runs, so
+    # a refused start leaves no half-prepared side effects behind.
+    Enum.each(declarations, fn {atom, count, _pipe_opts, _type} ->
       validate_count!(pipeline_module, atom, count)
+    end)
+
+    Enum.map(declarations, fn {atom, _count, pipe_opts, type} ->
       prepare_stage(pipeline_module, atom, pipe_opts, type, opts)
     end)
   end
@@ -127,10 +133,15 @@ defmodule Flowex.PipelineBuilder do
   end
 
   defp init_pipes({producer_spec, producer_name}, {pipeline_module, ref, opts}) do
-    (pipeline_module.pipes() ++ [pipeline_module.error_pipe()])
-    |> Enum.reduce({[producer_spec], [producer_name]}, fn {atom, count, pipe_opts, type},
-                                                          {wss, prev_names} ->
+    declarations = pipeline_module.pipes() ++ [pipeline_module.error_pipe()]
+
+    Enum.each(declarations, fn {atom, count, _pipe_opts, _type} ->
       validate_count!(pipeline_module, atom, count)
+    end)
+
+    Enum.reduce(declarations, {[producer_spec], [producer_name]}, fn {atom, count, pipe_opts,
+                                                                      type},
+                                                                     {wss, prev_names} ->
       merged = merge_opts(opts, pipe_opts)
 
       # The replica rule: each of a stage's count replicas runs module

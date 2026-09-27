@@ -1,5 +1,13 @@
 defmodule Flowex.Sync.Pipeline do
-  @moduledoc "Sync pipeline behaviour — one GenServer walks the pipe line."
+  @moduledoc """
+  Sync pipeline behaviour — one GenServer walks the pipe line.
+
+  Initialization follows the same contract as `Flowex.Pipeline` (see its
+  moduledoc): pipeline and module `init/1` run in the starting caller at
+  startup — once per declared occurrence here, once per replica on the
+  asynchronous engine — and prepared options are reused for every request
+  and for restarts.
+  """
 
   defmacro __using__(_args) do
     quote do

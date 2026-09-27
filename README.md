@@ -201,6 +201,14 @@ FunPipeline.cast(pipeline, %FunPipeline{number: 2})
 :ok
 ```
 
+## Initialization and options
+Two `init/1` callbacks run when a pipeline starts, both **in the starting caller, before any worker process exists** — never per request:
+
+- the pipeline module's own `init/1` receives the options passed to `start/1`/`supervised_start/2` and returns the pipeline options;
+- each module pipe's `init/1` receives its options (pipeline options merged with the pipe's declared `opts:`) and returns the options its `call/2,3` sees. On the asynchronous engine it runs **once per declared replica** (`count: 3` prepares three times, one per stage process); the synchronous engine executes one representative per stage and prepares **once per declared occurrence**.
+
+`init/1` is configuration preparation: it must return a map (module pipes) or a map/keyword list (pipeline), and the result is validated before any topology starts. It is **not** a worker-resource lifecycle callback — use a process-owned mechanism for resources that must be recreated with each worker. Supervisor-driven restarts reuse the prepared options; only a new explicit start runs `init/1` again.
+
 ## Run via client
 Another way is using `Flowex.Client` module which implements GenServer behavior.
 The `Flowex.Client.start\1` function receives pipeline struct as an argument.
