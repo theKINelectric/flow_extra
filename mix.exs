@@ -15,7 +15,7 @@ defmodule FlowExtra.Mixfile do
       deps: deps(),
       description: description(),
       package: package(),
-      source_url: "https://codeberg.org/kin_electric/flowex"
+      source_url: "https://codeberg.org/kin_electric/flow_extra"
     ]
   end
 
@@ -56,7 +56,8 @@ defmodule FlowExtra.Mixfile do
       maintainers: ["Anton Mishchuk", "kin_electric"],
       licenses: ["Apache-2.0"],
       links: %{
-        "Codeberg" => "https://codeberg.org/kin_electric/flowex",
+        "Codeberg" => "https://codeberg.org/kin_electric/flow_extra",
+        "GitHub (mirror)" => "https://github.com/theKINelectric/flow_extra",
         "GitHub (upstream)" => "https://github.com/antonmi/flowex"
       }
     ]
