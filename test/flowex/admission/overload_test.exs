@@ -199,7 +199,7 @@ defmodule Flowex.Admission.OverloadTest do
     Task.shutdown(task, :brutal_kill)
   end
 
-  test "a cast's :unavailable refusal is not followed by late execution" do
+  test "a cast left unacknowledged is refused at dequeue — no late execution" do
     pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
     owner = GenServer.whereis(pipeline.owner_name)
     # The trap must catch the OPEN pipeline's suspension (the acknowledged
@@ -226,7 +226,8 @@ defmodule Flowex.Admission.OverloadTest do
         end
       end)
 
-    assert_receive {:outcome, :cast, {:error, :unavailable}}, 700
+    assert_receive {:outcome, :cast, {:error, {:unacknowledged, request_ref}}}, 700
+    assert is_reference(request_ref)
     assert Process.alive?(caller)
     :sys.resume(owner)
 
@@ -240,7 +241,7 @@ defmodule Flowex.Admission.OverloadTest do
     send(caller, :stop)
   end
 
-  test "a call's :unavailable refusal is not followed by late execution" do
+  test "a call left unacknowledged is refused at dequeue — no late execution" do
     pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
     owner = GenServer.whereis(pipeline.owner_name)
     wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
@@ -271,11 +272,12 @@ defmodule Flowex.Admission.OverloadTest do
         end
       end)
 
-    assert_receive {:outcome, :call, {:refused, :unavailable, request_ref}}, 700
+    assert_receive {:outcome, :call, {:refused, :unacknowledged, request_ref}}, 700
 
     # An outcome learned by its acknowledgment timing out is uncertain,
-    # not a proven never-admitted: it carries the request identity so the
-    # caller can reconcile against the owner's ledger.
+    # not a proven never-admitted: it carries its OWN name — distinct from
+    # every definite refusal — and the request identity to inspect the
+    # owner's unresolved reservations with.
     assert is_reference(request_ref)
     assert Process.alive?(caller)
     :sys.resume(owner)
@@ -286,6 +288,36 @@ defmodule Flowex.Admission.OverloadTest do
     report = Flowex.Admission.report(pipeline.owner_name)
     assert report.active == 0 and request_ref not in report.refs
     send(caller, :stop)
+  end
+
+  test "a completed request leaves refs — absence is not proof of non-admission" do
+    pipeline = AdmissionTrapPipeline.start(%{admission_capacity: 1})
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).status == :open end)
+
+    assert :ok =
+             AdmissionTrapPipeline.cast(pipeline, %AdmissionTrapPipeline{
+               observer: self(),
+               id: :held
+             })
+
+    assert_receive {:entered, :held, worker}
+
+    # While the work is unresolved, its reservation is visible in the ledger.
+    wait_until(fn -> length(Flowex.Admission.report(pipeline.owner_name).refs) == 1 end)
+    [held_ref] = Flowex.Admission.report(pipeline.owner_name).refs
+
+    send(worker, :release)
+    assert_receive {:finished, :held}, 2_000
+
+    # After the terminal release the ref is GONE: :refs is
+    # unresolved-reservation visibility, not admission history. A caller
+    # checking later cannot read absence as never-admitted — this job WAS
+    # admitted (it ran and counts as succeeded) and its ref is absent all
+    # the same. Documentation must not tighten this into reconciliation.
+    wait_until(fn -> Flowex.Admission.report(pipeline.owner_name).refs == [] end)
+    report = Flowex.Admission.report(pipeline.owner_name)
+    assert held_ref not in report.refs
+    assert report.counts.succeeded == 1
   end
 
   test "the documented recovery: stop and restart reclaims an unresolved reservation" do
