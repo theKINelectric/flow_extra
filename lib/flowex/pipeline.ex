@@ -151,6 +151,11 @@ defmodule Flowex.Pipeline do
   @doc """
   The absolute local monotonic deadline (milliseconds) for a call timeout;
   `:infinity` maps to `nil` — no deadline. Local to one BEAM node.
+
+  The deadline bounds the call's admission wait too: past its budget the
+  caller still allows 25 ms for a late admission acknowledgment before
+  reporting the outcome (`Flowex.Admission` slack), so a reply already
+  on its way is heard rather than turned into uncertainty.
   """
   @spec deadline(timeout()) :: integer() | nil
   def deadline(:infinity), do: nil
