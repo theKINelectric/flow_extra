@@ -46,12 +46,13 @@ defmodule FlowExtra.Mixfile do
   defp package do
     [
       # The artifact must carry what consumers need downstream (FX-009): the
-      # formatter export (import_deps: [:flowextra]), the license notice, and
-      # the README's figures. Apache-2.0 is upstream's own LICENSE (Anton
+      # formatter export (import_deps: [:flowextra]), the complete Apache-2.0
+      # terms with preserved attribution, the migration guide from Flowex,
+      # and the README's figures. Apache-2.0 is upstream's own license (Anton
       # Mishchuk, 2017 — d78a761, tagged v0.5.1), verified present at the
       # fork point and at upstream master; the inherited "MIT" hex metadata
       # contradicted the author's own file and is not carried forward.
-      files: ~w(lib mix.exs README.md .formatter.exs LICENSE figures),
+      files: ~w(lib mix.exs README.md MIGRATION.md .formatter.exs LICENSE figures),
       maintainers: ["Anton Mishchuk", "kin_electric"],
       licenses: ["Apache-2.0"],
       links: %{

@@ -17,6 +17,7 @@ defmodule FlowExtra.PackageTest do
 
     assert ".formatter.exs" in files
     assert "LICENSE" in files
+    assert "MIGRATION.md" in files
     assert "figures" in files
 
     # Everything allowlisted exists in the checkout.
