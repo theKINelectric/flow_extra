@@ -129,18 +129,15 @@ defmodule Flowex.Pipeline do
     end
   end
 
-  # An uncertain :unavailable (acknowledgment timed out — see
-  # Flowex.Admission.submit/3) carries the request identity into the
-  # raise; every definite refusal is flat.
-  defp refuse!(pipeline, {:unavailable, request_ref}) when is_reference(request_ref) do
+  # The unacknowledged outcome (see Flowex.Admission.submit/3) is its
+  # own reason — uncertain, never spelled as a refusal — and carries the
+  # request identity into the raise.
+  defp refuse!(pipeline, {:unacknowledged, request_ref}) when is_reference(request_ref) do
     raise Flowex.AdmissionError,
       pipeline: pipeline,
-      reason: :unavailable,
+      reason: :unacknowledged,
       request_ref: request_ref
   end
-
-  defp refuse!(pipeline, {:unavailable, nil}),
-    do: raise(Flowex.AdmissionError, pipeline: pipeline, reason: :unavailable)
 
   defp refuse!(pipeline, :deadline),
     do: raise(Flowex.PipelineError, pipeline: pipeline, reason: :timeout)
@@ -325,9 +322,12 @@ defmodule Flowex.Pipeline do
       def cast(pipeline = %Flowex.Pipeline{owner_name: owner_name}, struct = %__MODULE__{}) do
         # Fire-and-forget: no reply destination, no deadline — but the
         # packet and its permit are submitted to the owner as one
-        # transaction (FX-001): :ok MEANS accepted-and-accounted-for. An
-        # overloaded pipeline answers {:error, :overloaded} instead of
-        # silently discarding the work later.
+        # transaction (FX-001): :ok MEANS accepted-and-accounted-for.
+        # Refusals are the owner's own answers, and an outcome the caller
+        # learned only by its acknowledgment timing out keeps its own
+        # name and its request identity: {:error, {:unacknowledged, ref}}
+        # — see Flowex.Admission.submit/3 for what each shape lets the
+        # caller infer.
         ip = %Flowex.IP{
           struct: Map.delete(struct, :__struct__),
           requester: nil,
@@ -337,12 +337,6 @@ defmodule Flowex.Pipeline do
         case Flowex.Admission.submit(owner_name, ip, nil) do
           {:ok, _consumer_pid} ->
             :ok
-
-          # The public shape stays flat: the uncertainty identity is
-          # reconcilable by business identity (the struct the caller
-          # built) and by the report's :refs for diagnosis.
-          {:error, {:unavailable, _identity}} ->
-            {:error, :unavailable}
 
           {:error, reason} ->
             {:error, reason}

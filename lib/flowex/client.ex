@@ -9,11 +9,15 @@ defmodule Flowex.Client do
   failures (a missed deadline, a dead pipeline) raise as
   `Flowex.PipelineError` at the caller boundary without killing the
   reusable client; unexpected implementation failures crash it normally.
-  Admission refusals are expected request failures too (FX-001 closure):
+  Admission answers are expected request failures too (FX-001 closure):
   `call/3` raises `Flowex.AdmissionError` the same way, and `cast/2`
-  reports the pipeline's refusal — `:ok` from the client means the
-  pipeline accepted and accounted the work, exactly as `cast/2` on the
-  pipeline itself.
+  reports the pipeline's own answer — `:ok` from the client means the
+  pipeline accepted and accounted the work, a definite refusal arrives
+  as `{:error, :overloaded | :unavailable | :noprocess}`, and an
+  outcome learned only by its acknowledgment timing out arrives as
+  `{:error, {:unacknowledged, ref}}` — uncertain, never spelled as a
+  refusal. See `Flowex.Admission.submit/3` for what each shape lets the
+  caller infer.
   """
 
   use GenServer
@@ -57,10 +61,14 @@ defmodule Flowex.Client do
   @doc """
   Casts through the client and returns the pipeline's own answer —
   `:ok` when the work was admitted and accounted, `{:error, reason}`
-  when the pipeline refused it.
+  when the pipeline definitely refused it, and `{:error,
+  {:unacknowledged, ref}}` when only the acknowledgment timed out
+  (uncertain; the ref is the request identity).
   """
   @spec cast(GenServer.server(), struct()) ::
-          :ok | {:error, :overloaded | :unavailable | :noprocess}
+          :ok
+          | {:error, :overloaded | :unavailable | :noprocess}
+          | {:error, {:unacknowledged, reference()}}
   def cast(pid, struct) do
     GenServer.call(pid, {:cast, struct})
   end
