@@ -80,3 +80,13 @@ Astra's follow-up checks found three more defects at `bf097f6` (1/4 in their rep
 - Outcome uncertainty (what happened to the work) is kept separate from capacity reservation (whether the slot is held): `counts` stay release-driven; `active`/`refs` carry the unresolved set.
 
 Trap-craft lesson from the RED work: a trap that suspends the owner during boot settling exercises the honest explicit settling refusal, not the defect — the barrier must wait for the owner to reach `:open` first (the first cast-mode trap passed vacuously until this was fixed; the boot attach can lag `start/1` by ~5ms).
+
+### The public uncertainty contract, finalized (2026-09-27, third review pass)
+
+The reviewer accepted the deadline, monitor, and incarnation repairs and closed the contract's last gap with a ruling: **do not preserve a reproducer's outcome spelling at the expense of an honest API.** Applied (`ea89375` RED, GREEN after it):
+
+- The uncertain outcome has its own name. `{:error, {:unacknowledged, ref}}` from `cast/2` and `Client.cast/2`; `Flowex.AdmissionError` reason `:unacknowledged` (with `request_ref`) raised by `call/3` and `Client.call/3`. `:unavailable` returns to meaning exactly one thing: a definite refusal the owner itself returned (settling, or expired at dequeue) — nothing reserved, nothing will execute. `:overloaded` and `:noprocess` stay definite, with `:noprocess`'s honesty coming from the wrapper: anything accepted in the owner's last instant died with the line.
+- **What cast callers can infer** is now specified at every surface (README, `Flowex.Admission.submit/3`, both clients' moduledocs): `:ok` = admitted and accounted; the definite refusals = nothing will execute; `{:unacknowledged, ref}` = unknown, keep the ref.
+- **`refs` is unresolved-reservation visibility, not reconciliation.** A completed request leaves the list; the ledger keeps no admission history; absence means released-or-never-admitted and proves nothing. Pinned by test ("a completed request leaves refs — absence is not proof of non-admission": the pinned job ran, counts as succeeded, and its ref is absent).
+- Unconditional claims removed: the moduledoc no longer says a refused-looking submission "never executes afterward" (the last-instant acknowledgment race survives and is *named*, never spelled as a refusal); the outcome law stays the narrowed released-or-unresolved form.
+- The follow-up reproducer's outcome spellings (`{:error, :unavailable}` for the ack-timeout cases) were adapted for the verification run — the same class of faithful adjustment as the earlier `:admit`→`:submit` barrier, now done under the reviewer's explicit ruling that the API outranks the reproducer.

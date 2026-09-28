@@ -41,18 +41,21 @@ end
 
 defmodule Flowex.AdmissionError do
   @moduledoc """
-  The pipeline refused the request before admission (FX-001): its
-  admitted-work capacity is exhausted (`:overloaded`), or admission was
-  not confirmed within the submission's own budget (`:unavailable`).
+  The pipeline's answer before admission (FX-001), named by what the
+  caller actually knows.
 
-  `:unavailable` is honest about its certainty. A refusal the owner
-  explicitly returned — settling, or expired at dequeue — is definite:
-  no permit was taken and no work began. `request_ref` being set marks
-  an outcome the caller learned by its acknowledgment timing out: the
-  submission may have been admitted in the last instant before the
-  reply was lost. Reconcile it with `Flowex.Admission.report/1` (the
-  `:refs` list) using that reference. This is a policy outcome, not a
-  pipeline failure.
+  `:overloaded` and `:unavailable` are definite refusals — the owner
+  itself returned them (capacity; settling or expired at dequeue): no
+  permit was taken, nothing of this submission will execute.
+
+  `:unacknowledged` is NOT a refusal: the caller learned the outcome by
+  its acknowledgment timing out, and the submission may have been
+  admitted in the last instant before the reply was lost. `request_ref`
+  identifies it. Check `Flowex.Admission.report/1`'s `:refs` — a live
+  view of unresolved reservations, not an admission history: the ref's
+  presence means admitted-and-unresolved; its absence means
+  released-or-never-admitted and proves nothing. These are policy
+  outcomes, not pipeline failures.
   """
 
   defexception pipeline: nil, reason: nil, request_ref: nil
@@ -62,14 +65,14 @@ defmodule Flowex.AdmissionError do
     "Flowex pipeline #{describe(error)} is at its admitted-work capacity — refused before admission"
   end
 
-  def message(error = %__MODULE__{reason: :unavailable, request_ref: nil}) do
-    "Flowex pipeline #{describe(error)} did not confirm admission within the submission budget — refused before admission, retry"
+  def message(error = %__MODULE__{reason: :unavailable}) do
+    "Flowex pipeline #{describe(error)} did not accept the submission — settling, or the attempt expired at dequeue; nothing was reserved"
   end
 
-  def message(error = %__MODULE__{reason: :unavailable}) do
-    "Flowex pipeline #{describe(error)} did not confirm admission within the submission budget — " <>
+  def message(error = %__MODULE__{reason: :unacknowledged}) do
+    "Flowex pipeline #{describe(error)} did not acknowledge the submission before its budget ended — " <>
       "it may have been admitted at the boundary (request #{inspect(error.request_ref)}); " <>
-      "reconcile with Flowex.Admission.report/1"
+      "Flowex.Admission.report/1 :refs shows unresolved reservations, and absence there is inconclusive"
   end
 
   def message(error = %__MODULE__{reason: reason}) do

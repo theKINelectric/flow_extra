@@ -6,21 +6,23 @@ defmodule Flowex.Admission do
   The contract, in brief — a submission is one transaction: the owner
   reserves the permit AND forwards the packet (`submit/3`), so no caller
   death can strand a reservation without its packet. A submission either
-  acquires a permit (the work WILL be accounted to a terminal outcome)
-  or is refused observably — and a refusal the caller has received is
-  enforced again at dequeue, so refused-looking submissions never
-  execute afterward. Permits are held for the work's whole lifetime: a
-  caller's timeout or death releases nothing, and a topology failure
-  RETAINS its generation's permits — surviving work keeps executing and
-  keeps its capacity until its own terminal release, while work
-  destroyed with the topology stays admitted, outcome unknown. Nothing
-  is invented into success or failure, and no slot is reused under
-  surviving work. Every admitted job is either released to exactly one
-  terminal outcome or remains an unresolved reservation — reported
-  `active`, outcome unknown — until the pipeline is restarted
-  (retention with manual recovery: stop and start again, a confirmed
-  termination of the whole execution generation). See
-  `docs/research/flowex/C-admission-design.md`.
+  acquires a permit (the work is accounted from there) or meets a
+  definite refusal — every definite refusal is enforced again at
+  dequeue. The one thing that can still execute after its caller heard
+  otherwise is a submission admitted in the last instant before its
+  acknowledgment was lost, and that outcome carries its own name —
+  `{:unacknowledged, ref}` — never the name of a refusal. Permits are
+  held for the work's whole lifetime: a caller's timeout or death
+  releases nothing, and a topology failure RETAINS its generation's
+  permits — surviving work keeps executing and keeps its capacity until
+  its own terminal release, while work destroyed with the topology
+  stays admitted, outcome unknown. Nothing is invented into success or
+  failure, and no slot is reused under surviving work. Every admitted
+  job is either released to exactly one terminal outcome or remains an
+  unresolved reservation — reported `active`, outcome unknown — until
+  the pipeline is restarted (retention with manual recovery: stop and
+  start again, a confirmed termination of the whole execution
+  generation). See `docs/research/flowex/C-admission-design.md`.
 
   The owner monitors every line worker. Any worker death quiesces the
   generation; because the wrapper supervisor is `:rest_for_one` with the
@@ -66,23 +68,30 @@ defmodule Flowex.Admission do
   acknowledgment) is refused again by the owner, never forwarded, never
   executed after the fact.
 
-  Refusal certainty: `{:error, :overloaded}` is immediate and definite;
-  `{:error, {:unavailable, nil}}` is an explicit owner refusal — settling,
-  or expired at dequeue — and definite; `{:error, {:unavailable, ref}}`
-  marks an outcome learned by the acknowledgment timing out, where the
-  submission may have been admitted in the last instant before the reply
-  was lost — the `ref` identifies it for reconciliation against the
-  `:refs` list of `report/1`. `{:error, :deadline}` is the caller's own
-  budget, whose residual uncertainty is the ordinary timeout contract
-  (execution may continue past a caller's deadline); `{:error,
-  :noprocess}` means the owner (and with it the line) is gone.
+  Refusal certainty — the outcome names what the caller actually knows:
+
+  - `{:error, :overloaded}` — definite: at capacity, nothing reserved,
+    nothing will execute.
+  - `{:error, :unavailable}` — definite: the owner itself refused —
+    settling, or the attempt's deadline expired at dequeue — nothing
+    reserved, nothing will execute.
+  - `{:error, {:unacknowledged, ref}}` — UNKNOWN: the acknowledgment
+    timed out and the submission may have been admitted in the last
+    instant before the reply was lost. Keep the `ref` and inspect
+    `report/1`'s `:refs` — unresolved-reservation visibility, not
+    admission history: a ref present means admitted-and-unresolved; a
+    ref ABSENT means released or never admitted, and does not prove
+    non-admission.
+  - `{:error, :deadline}` — the caller's own budget ran out; the
+    residual uncertainty is the ordinary timeout contract (execution
+    may continue past a caller's deadline).
+  - `{:error, :noprocess}` — the owner (and with it the line) is gone;
+    anything accepted in its last instant died with the line.
   """
   @spec submit(GenServer.name(), Flowex.IP.t(), integer() | nil) ::
           {:ok, pid()}
-          | {:error, :overloaded}
-          | {:error, {:unavailable, reference() | nil}}
-          | {:error, :deadline}
-          | {:error, :noprocess}
+          | {:error, :overloaded | :unavailable | :deadline | :noprocess}
+          | {:error, {:unacknowledged, reference()}}
   def submit(owner, ip, deadline \\ nil) do
     started = System.monotonic_time(:millisecond)
     grace_end = started + @settle_grace
@@ -97,18 +106,17 @@ defmodule Flowex.Admission do
   @doc """
   Reserves a permit for `id` without a packet — a diagnostic for ledger
   and reconciliation probes; the engine paths use `submit/3`. Refusal
-  semantics as `submit/3` with the settling grace as the whole budget,
-  flattened to `{:error, :unavailable}`.
+  semantics as `submit/3` with the settling grace as the whole budget;
+  an unacknowledged diagnostic attempt reports `{:error,
+  {:unacknowledged, nil}}`.
   """
   @spec admit(GenServer.name(), reference()) ::
-          {:ok, integer()} | {:error, :overloaded | :unavailable | :noprocess}
+          {:ok, integer()}
+          | {:error, :overloaded | :unavailable | :noprocess}
+          | {:error, {:unacknowledged, nil}}
   def admit(owner, id) do
     budget_end = System.monotonic_time(:millisecond) + @settle_grace
-
-    case ask(owner, {:admit, id}, budget_end, :unavailable, nil) do
-      {:error, {:unavailable, _identity}} -> {:error, :unavailable}
-      other -> other
-    end
+    ask(owner, {:admit, id}, budget_end, :unavailable, nil)
   end
 
   @doc """
@@ -127,8 +135,10 @@ defmodule Flowex.Admission do
   `active` counts unresolved reservations — queued and executing work,
   and work destroyed with the topology whose outcome is unknown until
   the pipeline is restarted; `refs` exposes those reservations'
-  identities so a caller holding an uncertain admission outcome can
-  reconcile it.
+  identities. `refs` is unresolved-reservation VISIBILITY, not admission
+  history: a completed request leaves the list, so a ref's absence means
+  released-or-never-admitted and does not prove non-admission. The
+  ledger keeps no record of past admissions.
   """
   @spec report(GenServer.name()) :: %{
           required(:generation) => integer(),
@@ -177,10 +187,10 @@ defmodule Flowex.Admission do
     end
   end
 
-  defp definite(:unavailable), do: {:unavailable, nil}
+  defp definite(:unavailable), do: :unavailable
   defp definite(:deadline), do: :deadline
 
-  defp uncertain(:unavailable, identity), do: {:unavailable, identity}
+  defp uncertain(:unavailable, identity), do: {:unacknowledged, identity}
 
   # A deadline-bound wait that never got acknowledged has the ordinary
   # timeout contract as its residual: execution may continue past a
