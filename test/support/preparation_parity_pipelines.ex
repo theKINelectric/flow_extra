@@ -22,7 +22,7 @@ defmodule PreparationTokenPipe do
 end
 
 defmodule PreparationTokenPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:prepared_token]
 
@@ -33,7 +33,7 @@ defmodule PreparationTokenPipeline do
 end
 
 defmodule PreparationTokenPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:prepared_token]
 
@@ -73,7 +73,7 @@ defmodule PreparationCountingErrorPipe do
 end
 
 defmodule PreparationFrequencyPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct value: nil
 
@@ -84,7 +84,7 @@ defmodule PreparationFrequencyPipeline do
 end
 
 defmodule PreparationFrequencyPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct value: nil
 
@@ -95,7 +95,7 @@ defmodule PreparationFrequencyPipelineSync do
 end
 
 defmodule PreparationErrorStagePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct value: :original
 
@@ -106,7 +106,7 @@ defmodule PreparationErrorStagePipeline do
 end
 
 defmodule PreparationErrorStagePipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct value: :original
 
@@ -117,7 +117,7 @@ defmodule PreparationErrorStagePipelineSync do
 end
 
 defmodule SyncCountCapPipeline do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct []
 
@@ -134,7 +134,7 @@ defmodule LateBadCountPipeline do
   `{:prepared, _, _, _}` observation.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct []
 
@@ -145,7 +145,7 @@ defmodule LateBadCountPipeline do
 end
 
 defmodule LateBadCountPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct []
 

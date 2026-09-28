@@ -22,7 +22,7 @@ defmodule DualArityErrorPipe do
 end
 
 defmodule HappyTrackPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct value: :original
 
@@ -33,7 +33,7 @@ defmodule HappyTrackPipeline do
 end
 
 defmodule HappyTrackPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct value: :original
 
@@ -44,7 +44,7 @@ defmodule HappyTrackPipelineSync do
 end
 
 defmodule FailingTrackPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct value: :original
 
@@ -55,7 +55,7 @@ defmodule FailingTrackPipeline do
 end
 
 defmodule FailingTrackPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct value: :original
 

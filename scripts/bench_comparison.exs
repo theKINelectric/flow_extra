@@ -3,8 +3,8 @@
 # Four executors over the same deterministic work:
 #   direct        — plain function composition (the pipeline callbacks, in order)
 #   task_stream   — Task.async_stream with the workload's concurrency budget
-#   sync engine   — Flowex.Sync.Pipeline (one process walks the line)
-#   async engine  — Flowex.Pipeline (GenStage stages; slow stages replicated)
+#   sync engine   — FlowExtra.Sync.Pipeline (one process walks the line)
+#   async engine  — FlowExtra.Pipeline (GenStage stages; slow stages replicated)
 #
 # Workload matrix (bounded, synthetic — see the D record for what this can
 # and cannot establish):
@@ -21,7 +21,7 @@
 Logger.configure(level: :emergency)
 
 defmodule Bench.Cheap do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct n: nil
   pipe(:a)
   pipe(:b)
@@ -32,7 +32,7 @@ defmodule Bench.Cheap do
 end
 
 defmodule Bench.CheapSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
   defstruct n: nil
   pipe(:a)
   pipe(:b)
@@ -43,7 +43,7 @@ defmodule Bench.CheapSync do
 end
 
 defmodule Bench.Cpu do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct n: nil
   pipe(:grind)
 
@@ -54,7 +54,7 @@ defmodule Bench.Cpu do
 end
 
 defmodule Bench.CpuSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
   defstruct n: nil
   pipe(:grind)
 
@@ -65,7 +65,7 @@ defmodule Bench.CpuSync do
 end
 
 defmodule Bench.Cpu8 do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct n: nil
   pipe(:grind, count: 8)
 
@@ -76,7 +76,7 @@ defmodule Bench.Cpu8 do
 end
 
 defmodule Bench.Uneven do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct n: nil
   pipe(:fast_a)
   pipe(:slow, count: 10)
@@ -87,7 +87,7 @@ defmodule Bench.Uneven do
 end
 
 defmodule Bench.UnevenSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
   defstruct n: nil
   pipe(:fast_a)
   pipe(:slow, count: 10)
@@ -98,14 +98,14 @@ defmodule Bench.UnevenSync do
 end
 
 defmodule Bench.Burst do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct n: nil
   pipe(:work, count: 20)
   def work(%{n: n}, _o), do: Process.sleep(2) && %{n: n + 1}
 end
 
 defmodule Bench.BurstSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
   defstruct n: nil
   pipe(:work, count: 20)
   def work(%{n: n}, _o), do: Process.sleep(2) && %{n: n + 1}

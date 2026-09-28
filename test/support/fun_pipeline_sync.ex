@@ -1,5 +1,5 @@
 defmodule FunPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   pipe(:add_one, opts: %{o1: 1})
   pipe(:mult_by_two, opts: %{o2: 2})

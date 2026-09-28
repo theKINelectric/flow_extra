@@ -5,7 +5,7 @@ defmodule ReplyTrapPipeline do
   after the caller has timed out.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:report_to, :ref]
 
@@ -24,7 +24,7 @@ defmodule ReplyTrapTwoStagePipeline do
   then a fast second stage that reports whether it began at all.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:report_to, :ref]
 

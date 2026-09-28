@@ -1,5 +1,5 @@
 defmodule ParallelPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct [:n]
 
   pipe(:add)

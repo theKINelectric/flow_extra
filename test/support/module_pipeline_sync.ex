@@ -1,5 +1,5 @@
 defmodule ModulePipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number, :a, :b, :c]
 

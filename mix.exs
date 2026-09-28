@@ -1,9 +1,9 @@
-defmodule Flowex.Mixfile do
+defmodule FlowExtra.Mixfile do
   use Mix.Project
 
   def project do
     [
-      app: :flowex,
+      app: :flowextra,
       # 0.6.0: the fork's own line — admission protocol, one-deadline calls,
       # supervised stop semantics; cast/2's refusal return is breaking.
       version: "0.6.0",
@@ -21,7 +21,7 @@ defmodule Flowex.Mixfile do
 
   def application do
     [
-      mod: {Flowex.Application, []},
+      mod: {FlowExtra.Application, []},
       extra_applications: []
     ]
   end
@@ -46,7 +46,7 @@ defmodule Flowex.Mixfile do
   defp package do
     [
       # The artifact must carry what consumers need downstream (FX-009): the
-      # formatter export (import_deps: [:flowex]), the license notice, and
+      # formatter export (import_deps: [:flowextra]), the license notice, and
       # the README's figures. Apache-2.0 is upstream's own LICENSE (Anton
       # Mishchuk, 2017 — d78a761, tagged v0.5.1), verified present at the
       # fork point and at upstream master; the inherited "MIT" hex metadata

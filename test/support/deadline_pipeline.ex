@@ -1,5 +1,5 @@
 defmodule DeadlinePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 
@@ -12,7 +12,7 @@ defmodule DeadlinePipeline do
 end
 
 defmodule DeadlinePipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number]
 

@@ -1,5 +1,5 @@
 defmodule CountCapPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 
@@ -17,7 +17,7 @@ defmodule BadInitModule do
 end
 
 defmodule BadModuleInitPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 
@@ -25,7 +25,7 @@ defmodule BadModuleInitPipeline do
 end
 
 defmodule BadModuleInitPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number]
 
@@ -33,7 +33,7 @@ defmodule BadModuleInitPipelineSync do
 end
 
 defmodule BadPipelineInitPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 
@@ -45,7 +45,7 @@ defmodule BadPipelineInitPipeline do
 end
 
 defmodule BadPipelineInitPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number]
 

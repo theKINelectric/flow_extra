@@ -1,5 +1,5 @@
 defmodule InitOptsFunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:from_start, :from_init, :from_opts]
   pipe(:component, opts: %{from_opts: 3}, count: 2)
@@ -10,7 +10,7 @@ defmodule InitOptsFunPipeline do
 end
 
 defmodule InitOptsModulePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:from_start, :from_init, :from_opts, :component_init]
   pipe(OptComponent, opts: %{from_opts: 3}, count: 2)

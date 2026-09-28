@@ -1,5 +1,5 @@
 defmodule SupervisedInitFunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct initialized: nil
 
@@ -11,7 +11,7 @@ defmodule SupervisedInitFunPipeline do
 end
 
 defmodule SupervisedInitFunPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct initialized: nil
 
@@ -23,7 +23,7 @@ defmodule SupervisedInitFunPipelineSync do
 end
 
 defmodule BadPipelineInitStandalone do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct []
 
@@ -34,7 +34,7 @@ defmodule BadPipelineInitStandalone do
 end
 
 defmodule BadPipelineInitStandaloneSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct []
 

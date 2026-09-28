@@ -23,7 +23,7 @@ defmodule ParityErrorPipe do
 end
 
 defmodule ParityPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number, :mark]
 
@@ -35,7 +35,7 @@ defmodule ParityPipeline do
 end
 
 defmodule ParityPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number, :mark]
 
@@ -47,7 +47,7 @@ defmodule ParityPipelineSync do
 end
 
 defmodule ErrorParityPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number, :mark]
 
@@ -58,7 +58,7 @@ defmodule ErrorParityPipeline do
 end
 
 defmodule ErrorParityPipelineSync do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number, :mark]
 

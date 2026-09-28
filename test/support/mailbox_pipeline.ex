@@ -4,7 +4,7 @@ defmodule MailboxPipeline do
   to observe what a `call/2` does to the calling process's mailbox.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 
