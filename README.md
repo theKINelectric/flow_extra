@@ -20,14 +20,19 @@ fork carries the file's Apache-2.0 forward and declares it consistently. Origina
 attribution is preserved.
 
 ## Railway Flow-Based Programming.
-## The library is not supported anymore, see the [ALF](https://github.com/antonmi/alf) project.
 #### FlowExtra is a set of abstractions built on top Elixir GenStage which allows writing program with [Flow-Based Programming](https://en.wikipedia.org/wiki/Flow-based_programming) paradigm.
+
+Upstream Flowex is not supported anymore — its author moved to
+[ALF](https://github.com/antonmi/alf). FlowExtra is the maintained
+continuation of that lineage.
 I would say it is a mix of FBP and so-called [Railway Oriented Programming (ROP)](http://fsharpforfunandprofit.com/rop/) approach.
 
 FlowExtra DSL allows you to easily create "pipelines" of Elixir GenStages.
 #### Dedicated to my lovely girlfriend Chryścina.
 
 ## Resources
+
+Historical material from the original Flowex project:
 - [Railway Flow-Based Programming with FlowExtra](https://medium.com/@anton.mishchuk/railway-flow-based-programming-with-flowex-ef04fd338e41#.wiy3c5g9i) - post
 - [FlowExtra: Flow-Based Programming with Elixir GenStage](https://www.slideshare.net/Elixir-Meetup/flowex-flowbased-programming-with-elixir-genstage-anton-mishchuk) - presentation
 - [Flow-based programming with Elixir](https://www.slideshare.net/AntonMishchuk/flowbased-programming-with-elixir) - presentation
@@ -40,7 +45,7 @@ FlowExtra DSL allows you to easily create "pipelines" of Elixir GenStages.
 - [Installation](#installation)
 - [A simple example to get the idea](#a-simple-example-to-get-the-idea)
 - [More complex example for understanding interface](#more-complex-example-for-understanding-interface)
-- [FlowExtra magic!](#flowex-magic!)
+- [FlowExtra magic!](#flowextra-magic)
 - [Run the pipeline](#run-the-pipeline)
 - [How it works](#how-it-works)
 - [Error handling](#error-handling)
@@ -50,7 +55,7 @@ FlowExtra DSL allows you to easily create "pipelines" of Elixir GenStages.
 - [Module pipes](#module-pipes)
 - [Data available in pipes](#data-available-in-pipes)
 - [Starting strategies](#starting-strategies)
-- [Debugging with FlowExtra.Sync.Pipeline](#debugging-with-flowexsyncpipeline)
+- [Debugging with FlowExtra.Sync.Pipeline](#debugging-with-flowextrasyncpipeline)
 - [Contributing](#contributing)
 
 ## Installation

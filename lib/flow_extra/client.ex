@@ -63,8 +63,12 @@ defmodule FlowExtra.Client do
 
   @doc """
   Casts through the client and returns the pipeline's own answer —
-  `:ok` when the work was admitted and accounted, `{:error, reason}`
-  when the pipeline definitely refused it, and `{:error,
+  `:ok` when the work was admitted and accounted; `{:error,
+  :overloaded | :unavailable}` when the pipeline definitely refused it;
+  `{:error, :noprocess}` when communication with the admission owner
+  failed (the process was unavailable or terminated; whether the
+  submission executed or produced effects before that failure is not
+  established — not a definite refusal); and `{:error,
   {:unacknowledged, ref}}` when only the acknowledgment timed out
   (uncertain; the ref is the request identity).
   """

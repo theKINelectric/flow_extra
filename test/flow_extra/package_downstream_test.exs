@@ -43,10 +43,31 @@ defmodule FlowExtra.PackageDownstreamTest do
         )
 
       # The artifact carries what the checkout promised (FX-009's original
-      # omissions: formatter export, license, figures).
+      # omissions: formatter export, license, figures) — and the license is
+      # the COMPLETE Apache-2.0 terms with upstream's attribution preserved,
+      # not the boilerplate notice alone that references them.
       assert File.exists?(Path.join(extracted, ".formatter.exs"))
-      assert File.exists?(Path.join(extracted, "LICENSE"))
       assert File.exists?(Path.join(extracted, "figures/pipeline_with_client.png"))
+
+      license = File.read!(Path.join(extracted, "LICENSE"))
+      assert license =~ "Copyright 2017 Anton Mishchuk"
+      assert license =~ "Apache License"
+      assert license =~ "Version 2.0, January 2004"
+      # The terms, complete: definition, grant, redistribution conditions,
+      # disclaimer, limitation — the canonical sections in order.
+      assert license =~ "1. Definitions."
+      assert license =~ "2. Grant of Copyright License."
+      assert license =~ "4. Redistribution."
+      assert license =~ "7. Disclaimer of Warranty."
+      assert license =~ "8. Limitation of Liability."
+      assert license =~ "END OF TERMS AND CONDITIONS"
+
+      # The migration guide travels with the package: a Flowex consumer
+      # finds the namespace/config mapping inside the artifact itself.
+      migration = File.read!(Path.join(extracted, "MIGRATION.md"))
+      assert migration =~ "FlowExtra"
+      assert migration =~ "{:flowextra"
+      assert migration =~ "use FlowExtra.Pipeline"
 
       # A fresh downstream project, depending only on the extracted artifact.
       {_, 0} = System.cmd("mix", ["new", "downstream_app"], cd: tmp, stderr_to_stdout: true)
