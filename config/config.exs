@@ -10,11 +10,11 @@ import Config
 
 # You can configure for your application as:
 #
-#     config :flowex, key: :value
+#     config :flowextra, key: :value
 #
 # And access this configuration in your application as:
 #
-#     Application.get_env(:flowex, :key)
+#     Application.get_env(:flowextra, :key)
 #
 # Or configure a 3rd-party app:
 #

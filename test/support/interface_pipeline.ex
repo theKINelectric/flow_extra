@@ -1,5 +1,5 @@
 defmodule InterfacePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   defstruct [:x, :y, :a, :b, :foo, :p, :q, :ok, :z]
 
   pipe(C1)
@@ -33,7 +33,7 @@ end
 
 # README example
 defmodule DataAvailable do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:top, :c1, :foo]
 

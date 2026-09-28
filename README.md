@@ -1,14 +1,17 @@
-# Flowex
-[![Hex.pm](https://img.shields.io/hexpm/v/flowex.svg?style=flat-square)](https://hex.pm/packages/flowex)
+# FlowExtra
+[![Hex.pm](https://img.shields.io/hexpm/v/flowextra.svg?style=flat-square)](https://hex.pm/packages/flowextra)
 
 ## Fork notice
 
-This is a vendored, factory-maintained fork of [antonmi/flowex](https://github.com/antonmi/flowex),
-revived by the Factory on Elixir 1.20.4/OTP 29 — the only runtime actually verified here.
+**FlowExtra began as a fork of [Anton Mishchuk's Flowex](https://github.com/antonmi/flowex)** —
+same lineage under a new name and namespace: modules `FlowExtra.*`, package and application
+`flowextra` / `:flowextra`. It is maintained by the Factory from the 2026 revival on
+Elixir 1.20.4/OTP 29 — the only runtime actually verified here.
 The package's declared floor (`~> 1.15`) is inherited from upstream and is **not** re-certified
 by this fork yet (see `docs/research/flowex/E-artifact-and-provenance.md`). Lineage: `antonmi/flowex @ 3a9ebae`;
 fork point: `3ccf92e`. Upstream declared the project unsupported (see ALF); development
-continues here as the Factory's Railway backbone.
+continues here as the Factory's Railway backbone. See [MIGRATION.md](MIGRATION.md) for
+moving code from Flowex to FlowExtra.
 
 **License: Apache-2.0.** The LICENSE file is upstream's own — added by Anton Mishchuk in
 2017 (`d78a761`, tagged v0.5.1) and present at the fork point and at upstream master.
@@ -18,26 +21,26 @@ attribution is preserved.
 
 ## Railway Flow-Based Programming.
 ## The library is not supported anymore, see the [ALF](https://github.com/antonmi/alf) project.
-#### Flowex is a set of abstractions built on top Elixir GenStage which allows writing program with [Flow-Based Programming](https://en.wikipedia.org/wiki/Flow-based_programming) paradigm.
+#### FlowExtra is a set of abstractions built on top Elixir GenStage which allows writing program with [Flow-Based Programming](https://en.wikipedia.org/wiki/Flow-based_programming) paradigm.
 I would say it is a mix of FBP and so-called [Railway Oriented Programming (ROP)](http://fsharpforfunandprofit.com/rop/) approach.
 
-Flowex DSL allows you to easily create "pipelines" of Elixir GenStages.
+FlowExtra DSL allows you to easily create "pipelines" of Elixir GenStages.
 #### Dedicated to my lovely girlfriend Chryścina.
 
 ## Resources
-- [Railway Flow-Based Programming with Flowex](https://medium.com/@anton.mishchuk/railway-flow-based-programming-with-flowex-ef04fd338e41#.wiy3c5g9i) - post
-- [Flowex: Flow-Based Programming with Elixir GenStage](https://www.slideshare.net/Elixir-Meetup/flowex-flowbased-programming-with-elixir-genstage-anton-mishchuk) - presentation
+- [Railway Flow-Based Programming with FlowExtra](https://medium.com/@anton.mishchuk/railway-flow-based-programming-with-flowex-ef04fd338e41#.wiy3c5g9i) - post
+- [FlowExtra: Flow-Based Programming with Elixir GenStage](https://www.slideshare.net/Elixir-Meetup/flowex-flowbased-programming-with-elixir-genstage-anton-mishchuk) - presentation
 - [Flow-based programming with Elixir](https://www.slideshare.net/AntonMishchuk/flowbased-programming-with-elixir) - presentation
-- [Flow-Based REST API with Flowex and Plug](https://medium.com/@anton.mishchuk/flow-based-rest-api-with-flowex-and-plug-323d6920f166) - post
-- [Multi language FBP with Flowex](https://www.slideshare.net/pivorak/multi-language-fbp-with-flowex-by-anton-mishchuk?qid=acfe02be-c264-4886-90b5-3cba4edf77ef&v=&b=&from_search=16) - presentation
-- [Multi-language Flowex components](https://medium.com/@anton.mishchuk/multi-language-flowex-components-fdda11d34744) - post
-- [Flow-Based REST API with Flowex and Plug](https://medium.com/@anton.mishchuk/flow-based-rest-api-with-flowex-and-plug-323d6920f166) - post
+- [Flow-Based REST API with FlowExtra and Plug](https://medium.com/@anton.mishchuk/flow-based-rest-api-with-flowex-and-plug-323d6920f166) - post
+- [Multi language FBP with FlowExtra](https://www.slideshare.net/pivorak/multi-language-fbp-with-flowex-by-anton-mishchuk?qid=acfe02be-c264-4886-90b5-3cba4edf77ef&v=&b=&from_search=16) - presentation
+- [Multi-language FlowExtra components](https://medium.com/@anton.mishchuk/multi-language-flowex-components-fdda11d34744) - post
+- [Flow-Based REST API with FlowExtra and Plug](https://medium.com/@anton.mishchuk/flow-based-rest-api-with-flowex-and-plug-323d6920f166) - post
 
 ## Contents
 - [Installation](#installation)
 - [A simple example to get the idea](#a-simple-example-to-get-the-idea)
 - [More complex example for understanding interface](#more-complex-example-for-understanding-interface)
-- [Flowex magic!](#flowex-magic!)
+- [FlowExtra magic!](#flowex-magic!)
 - [Run the pipeline](#run-the-pipeline)
 - [How it works](#how-it-works)
 - [Error handling](#error-handling)
@@ -47,11 +50,11 @@ Flowex DSL allows you to easily create "pipelines" of Elixir GenStages.
 - [Module pipes](#module-pipes)
 - [Data available in pipes](#data-available-in-pipes)
 - [Starting strategies](#starting-strategies)
-- [Debugging with Flowex.Sync.Pipeline](#debugging-with-flowexsyncpipeline)
+- [Debugging with FlowExtra.Sync.Pipeline](#debugging-with-flowexsyncpipeline)
 - [Contributing](#contributing)
 
 ## Installation
-Just add `flowex` as dependency to the `mix.exs` file.
+Just add `flowextra` as dependency to the `mix.exs` file.
 
 ## A simple example to get the idea
 Let's consider a simple program which receives a number as an input, then adds one, then multiplies the result by two and finally subtracts 3.
@@ -81,7 +84,7 @@ FBP defines applications as networks of "black box" processes, which exchange da
 
 To satisfy the FBP approach we need to place each of the function into a separate process. So the number will be passed from 'add_one' process to 'mult_by_two' and then 'minus_three' process which returns the final result.
 
-That, in short, is the idea of Flowex!
+That, in short, is the idea of FlowExtra!
 
 ## More complex example for understanding interface
 Let's define a more strict interface for our function.
@@ -128,11 +131,11 @@ defmodule MainModule do
 end
 ```
 
-## Flowex magic!
+## FlowExtra magic!
 Let's add a few lines at the beginning.
 ```elixir
 defmodule FunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   pipe :add_one
   pipe :mult_by_two
@@ -147,8 +150,8 @@ defmodule FunPipeline do
   # mult_by_two and minus_three definitions skipped
 end
 ```
-We also renamed the module to `FunPipeline` because we are going to create "Flowex pipeline".
-`Flowex.Pipeline` extend our module, so we have:
+We also renamed the module to `FunPipeline` because we are going to create "FlowExtra pipeline".
+`FlowExtra.Pipeline` extend our module, so we have:
 - `pipe` macro to define which function evaluation should be placed into separate GenStage;
 - `error_pipe` macro to define function which will be called if error occurs;
 - `start`, `supervised_start` and `stop` functions to create and destroy pipelines;
@@ -163,13 +166,13 @@ opts = %{a: 1, b: 2, c: 3}
 pipeline = FunPipeline.start(opts)
 
 #returns
-%Flowex.Pipeline{
-  in_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.504>, :producer}}},
+%FlowExtra.Pipeline{
+  in_name: {:via, Registry, {FlowExtra.Registry, {FunPipeline, #Reference<0.0.7.504>, :producer}}},
   module: FunPipeline,
-  out_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.521>, :consumer}}},
-  sup_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.530>, :supervisor}}},
+  out_name: {:via, Registry, {FlowExtra.Registry, {FunPipeline, #Reference<0.0.7.521>, :consumer}}},
+  sup_name: {:via, Registry, {FlowExtra.Registry, {FunPipeline, #Reference<0.0.7.530>, :supervisor}}},
   parent: nil,
-  owner_name: {:via, Registry, {Flowex.Registry, {FunPipeline, #Reference<0.0.7.533>, :admission_owner}}}}
+  owner_name: {:via, Registry, {FlowExtra.Registry, {FunPipeline, #Reference<0.0.7.533>, :admission_owner}}}}
 ```
 What happened:
 - Three GenStages have been started - one for each of the function in pipeline. Each of GenStages is `:producer_consumer`;
@@ -180,7 +183,7 @@ What happened:
 The next picture shows what the 'pipeline' is.
 ![alt text](figures/fun_pipeline.png "FunPipeline")
 
-The `start` function returns a `%Flowex.Pipeline{}` struct with the following fields:
+The `start` function returns a `%FlowExtra.Pipeline{}` struct with the following fields:
 - module - the name of the module
 - in_name - unique name of 'producer';
 - out_name - unique name of 'consumer';
@@ -195,7 +198,7 @@ One can run calculations in pipeline synchronously and asynchronously:
 - `call` function to run pipeline computations synchronously.
 - `cast` function to run pipeline computations asynchronously.
 
-`FunPipeline.call/2` function receive a `%Flowex.Pipeline{}` struct as a first argument and must receive a `%FunPipeline{}` struct as a second one.
+`FunPipeline.call/2` function receive a `%FlowExtra.Pipeline{}` struct as a first argument and must receive a `%FunPipeline{}` struct as a second one.
 The `call` function returns a %FunPipeline{} struct.
 
 ```elixir
@@ -225,36 +228,36 @@ The asynchronous engine bounds admitted work — queued plus executing packets t
 
 ```elixir
 FunPipeline.call(pipeline, %FunPipeline{number: 2})
-# raises Flowex.AdmissionError (reason: :overloaded) when the pipeline is at capacity
+# raises FlowExtra.AdmissionError (reason: :overloaded) when the pipeline is at capacity
 
 FunPipeline.cast(pipeline, %FunPipeline{number: 2})
 # :ok — accepted and accounted for — or {:error, :overloaded}
 ```
 
-`cast/2` returning `:ok` therefore **means the work is admitted**: the work is accounted from there — to a terminal release, or as an unresolved reservation until the pipeline is restarted (`Flowex.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission — with a 25 ms acknowledgment allowance past the budget, so a reply already on its way is still heard before the outcome is reported. What a cast caller can infer from each answer:
+`cast/2` returning `:ok` therefore **means the work is admitted**: the work is accounted from there — to a terminal release, or as an unresolved reservation until the pipeline is restarted (`FlowExtra.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission — with a 25 ms acknowledgment allowance past the budget, so a reply already on its way is still heard before the outcome is reported. What a cast caller can infer from each answer:
 
 - `:ok` — admitted and accounted;
 - `{:error, :overloaded}` / `{:error, :unavailable}` — **definite refusals** (capacity; settling or expired at dequeue): nothing was reserved, nothing of this submission will execute;
-- `{:error, {:unacknowledged, ref}}` — **unknown**, not a refusal: only the acknowledgment timed out, and the submission may have been admitted in the last instant before the reply was lost. Keep the `ref` and check `Flowex.Admission.report/1`'s `:refs` — a live view of *unresolved reservations*, not an admission history: the ref's presence means admitted-and-unresolved; its absence means released-or-never-admitted and does not prove non-admission (a completed job leaves the list);
+- `{:error, {:unacknowledged, ref}}` — **unknown**, not a refusal: only the acknowledgment timed out, and the submission may have been admitted in the last instant before the reply was lost. Keep the `ref` and check `FlowExtra.Admission.report/1`'s `:refs` — a live view of *unresolved reservations*, not an admission history: the ref's presence means admitted-and-unresolved; its absence means released-or-never-admitted and does not prove non-admission (a completed job leaves the list);
 - `{:error, :noprocess}` — communication with the admission owner failed because the process was unavailable or terminated. This does not establish whether the submission executed or produced effects before that failure; it is not a definite admission refusal.
 
-`call/3` raises `Flowex.AdmissionError` with the same distinction (`:overloaded`, `:unavailable` definite; `:unacknowledged` uncertain and carrying `request_ref`) or `Flowex.PipelineError` on its own budget. If a worker dies, in-flight calls fail (the consumer's death trips their monitors) while the generation quiesces: work that survives the failure keeps executing and **keeps its capacity** until its own terminal release — the reopened pipeline never double-books a slot under still-running old work — and work destroyed with the failure stays admitted, outcome unknown: never an invented success or failure, recoverable by stopping and restarting the pipeline (a confirmed termination of the whole execution generation). A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
+`call/3` raises `FlowExtra.AdmissionError` with the same distinction (`:overloaded`, `:unavailable` definite; `:unacknowledged` uncertain and carrying `request_ref`) or `FlowExtra.PipelineError` on its own budget. If a worker dies, in-flight calls fail (the consumer's death trips their monitors) while the generation quiesces: work that survives the failure keeps executing and **keeps its capacity** until its own terminal release — the reopened pipeline never double-books a slot under still-running old work — and work destroyed with the failure stays admitted, outcome unknown: never an invented success or failure, recoverable by stopping and restarting the pipeline (a confirmed termination of the whole execution generation). A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
 
 ## Run via client
-Another way is using `Flowex.Client` module which implements GenServer behavior.
-The `Flowex.Client.start\1` function receives pipeline struct as an argument.
+Another way is using `FlowExtra.Client` module which implements GenServer behavior.
+The `FlowExtra.Client.start\1` function receives pipeline struct as an argument.
 Then you can use `call/2` function or `cast/2`. See example below:
 ```elixir
-{:ok, client_pid} = Flowex.Client.start(pipeline)
+{:ok, client_pid} = FlowExtra.Client.start(pipeline)
 
-Flowex.Client.call(client_pid, %FunPipeline{number: 2})
+FlowExtra.Client.call(client_pid, %FunPipeline{number: 2})
 # returns
 %FunPipeline{a: 1, b: 2, c: 3, number: 3}
 # expected request failures (a missed deadline, a dead pipeline, an
 # admission refusal) raise at this boundary — the client survives them
 
 #or
-Flowex.Client.cast(client_pid, %FunPipeline{number: 2})
+FlowExtra.Client.cast(client_pid, %FunPipeline{number: 2})
 # returns
 :ok
 # the pipeline's own acknowledgment: :ok means admitted and accounted,
@@ -265,16 +268,16 @@ The following figure demonstrates the way data follows:
 ![alt text](figures/pipeline_with_client.png "How it works")
 Note: `error_pipe` is not on the picture in order to save place.
 
-The things happen when you call `Flowex.Client.call` (synchronous):
+The things happen when you call `FlowExtra.Client.call` (synchronous):
 - `self` process makes synchronous call to the client gen_server with `%FunPipeline{number: 2}` struct;
 - the client makes synchronous call 'FunPipeline.call(pipeline, %FunPipeline{number: 2})';
-- the struct is wrapped into `%Flowex.IP{}` struct and begins its asynchronous journey from one GenStage to another;
+- the struct is wrapped into `%FlowExtra.IP{}` struct and begins its asynchronous journey from one GenStage to another;
 - when the consumer receives the Information Packet (IP), it sends it back to the client which sends it back to the caller process.
 
 The things happen when you `cast` pipeline (asynchronous):
 - `self` process makes a call to the client and receives the pipeline's own answer: `:ok` — the work was admitted and accounted for — a definite refusal (`{:error, :overloaded}` / `{:error, :unavailable}`), or the uncertain `{:error, {:unacknowledged, ref}}` when only the acknowledgment timed out (see [Admission and overload](#admission-and-overload));
 - the client submits the struct to the pipeline's admission owner (reservation and forwarding are one transaction);
-- the struct is wrapped into `%Flowex.IP{}` struct and begins its asynchronous journey from one GenStage to another;
+- the struct is wrapped into `%FlowExtra.IP{}` struct and begins its asynchronous journey from one GenStage to another;
 - consumer does not send data back, because this is `cast`
 
 ## Error handling
@@ -282,7 +285,7 @@ What happens when error occurs in some pipe?
 
 The pipeline behavior is like Either monad. If everything ok, each 'pipe' function will be called one by one and result data will skip the 'error_pipe'.
 But if error happens, for example, in the first pipe, the `:mult_by_two` and `:minus_three` functions will not be called.
-IP will bypass to the 'error_pipe'. If you don't specify 'error_pipe' flowex will add the default one:
+IP will bypass to the 'error_pipe'. If you don't specify 'error_pipe' FlowExtra will add the default one:
 ```elixir
 def handle_error(error, _struct, _opts) do
   raise error
@@ -293,13 +296,13 @@ which just raises an exception.
 To specify the 'error' function use `error_pipe` macro:
 ```elixir
 defmodule FunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
   # ...
   error_pipe :if_error
 
 
   def if_error(error, struct, opts) do
-    # error is %Flowex.PipeError{} structure
+    # error is %FlowExtra.PipeError{} structure
     # with :message, :pipe, and :struct fields
     %{number: :oops}
   end
@@ -308,7 +311,7 @@ end
 ```
 You can specify only one error_pipe!
 Note: The 'error_pipe' function accepts three arguments.
-The first argument is a `%Flowex.PipeError{}` structure which has the following fields:
+The first argument is a `%FlowExtra.PipeError{}` structure which has the following fields:
 - `:message` - error message;
 - `:pipe` - is `{module, function, opts}` tuple containing info about the pipe where error occured;
 - `:struct` - the input of the pipe.
@@ -326,7 +329,7 @@ So there are three levels that options pass before appearing in component:
 Let's consider an example:
 ```elixir
 defmodule InitOptsFunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:from_start, :from_init, :from_opts]
   pipe :component, opts: %{from_opts: 3}
@@ -359,7 +362,7 @@ end
 ```
 
 ## Synchronous and asynchronous calls
-Note, that `call` function on pipeline module or `Flowex.Client` is synchronous. While communication inside the pipeline is asynchronous:
+Note, that `call` function on pipeline module or `FlowExtra.Client` is synchronous. While communication inside the pipeline is asynchronous:
 ![alt text](figures/pipeline_sync_async.png "Sync and async")
 One might think that there is no way to effectively use the pipeline via `call/2` method.
 
@@ -372,10 +375,10 @@ In order to send a large number of IP's and process them in parallel one can use
 Each component of pipeline takes a some to finish IP processing. One component does simple work, another can process data for a long time.
 So if several clients continuously push data they will stack before the slowest component. And data processing speed will be limited by that component.
 
-Flowex has a solution! One can define a number of execution processes for each component.
+FlowExtra has a solution! One can define a number of execution processes for each component.
 ```elixir
 defmodule FunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   pipe :add_one, count: 1
   pipe :mult_by_two, count: 3
@@ -394,7 +397,7 @@ One can create reusable 'pipe' - module which implements init and call functions
 Each module must define a struct it works with. Only fields defined it the stuct will be passed to `call` function.
 ```elixir
 defmodule ModulePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number, :a, :b, :c]
 
@@ -463,7 +466,7 @@ Map returned from the `call function` will be merged to the previos data.
 Let's consider an example:
 ```elixir
 defmodule DataAvailable do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:top, :c1, :foo]
 
@@ -535,7 +538,7 @@ defmodule OnePipelinePerApp do
 
   def start(_type, _opts) do
     pipeline = PipelineOne.start()
-    Application.put_env(:start_flowex, :pipeline, pipeline)
+    Application.put_env(:start_flowextra, :pipeline, pipeline)
     {:ok, GenServer.whereis(pipeline.sup_name)}
   end
 end
@@ -547,27 +550,27 @@ defmodule TwoPipelinesPerApp do
   use Application
 
   def start(_type, _opts) do
-    {:ok, supervisor_pid} = Supervisor.start_link([], strategy: :one_for_one, name: :multi_flowex_sup)
+    {:ok, supervisor_pid} = Supervisor.start_link([], strategy: :one_for_one, name: :multi_flowextra_sup)
 
     pipeline_one = PipelineOne.supervised_start(supervisor_pid)
     pipeline_two = PipelineTwo.supervised_start(supervisor_pid)
 
-    Application.put_env(:start_flowex, :pipeline_one, pipeline_one)
-    Application.put_env(:start_flowex, :pipeline_two, pipeline_two)
+    Application.put_env(:start_flowextra, :pipeline_one, pipeline_one)
+    Application.put_env(:start_flowextra, :pipeline_two, pipeline_two)
 
     {:ok,supervisor_pid}
   end
 end
 ```
 
-You can find the examples in ['Start-Flowex'](https://github.com/antonmi/Start-Flowex) project
+You can find the examples in ['Start-FlowExtra'](https://github.com/antonmi/Start-FlowExtra) project
 
-## Debugging with Flowex.Sync.Pipeline
-If you are faced with some error that is hard to debug or an error that causes GenServers to crash, you may find the `Flowex.Sync.Pipeline` module useful.
+## Debugging with FlowExtra.Sync.Pipeline
+If you are faced with some error that is hard to debug or an error that causes GenServers to crash, you may find the `FlowExtra.Sync.Pipeline` module useful.
 Adding one `Sync` word will completely change the behavior.
 ```elixir
 defmodule FunPipeline do
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
   # The same code as before
   # ...
 end  
@@ -583,7 +586,7 @@ Request a new feature by creating an issue.
 
 Create a pull request with new features or fixes.
 
-Flowex is tested using ExUnit, and kept honest by format, compile
+FlowExtra is tested using ExUnit, and kept honest by format, compile
 (warnings-as-errors), Dialyzer, and Credo --strict. So run:
 ```sh
 mix test

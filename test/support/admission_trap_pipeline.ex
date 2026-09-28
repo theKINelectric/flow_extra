@@ -6,7 +6,7 @@ defmodule AdmissionTrapPipeline do
   work SURVIVED that failure by finishing it afterwards.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:observer, :id]
 

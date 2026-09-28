@@ -1,5 +1,5 @@
 defmodule ModulePipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number, :a, :b, :c]
 

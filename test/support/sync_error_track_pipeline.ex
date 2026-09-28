@@ -4,7 +4,7 @@ defmodule SyncErrorTrackPipeline do
   and whose error pipe captures the PipeError's `error` key for inspection.
   """
 
-  use Flowex.Sync.Pipeline
+  use FlowExtra.Sync.Pipeline
 
   defstruct [:number, :caught_error]
 

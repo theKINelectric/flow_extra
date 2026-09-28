@@ -5,7 +5,7 @@ defmodule CountDriftPipeline do
   (`[1, 0]`), so a zero-count pipe silently builds two stages.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 

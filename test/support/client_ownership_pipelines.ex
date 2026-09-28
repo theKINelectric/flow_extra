@@ -5,7 +5,7 @@ defmodule ClientTrapPipeline do
   request's callbacks actually ran.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:report_to, :ref]
 
@@ -25,7 +25,7 @@ defmodule ClientSlowPipeline do
   the engine instead of being re-defaulted.
   """
 
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   defstruct [:number]
 

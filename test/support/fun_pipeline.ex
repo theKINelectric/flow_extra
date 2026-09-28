@@ -1,5 +1,5 @@
 defmodule FunPipeline do
-  use Flowex.Pipeline
+  use FlowExtra.Pipeline
 
   pipe(:add_one)
   pipe(:mult_by_two)
