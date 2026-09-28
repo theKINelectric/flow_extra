@@ -85,8 +85,11 @@ defmodule Flowex.Admission do
   - `{:error, :deadline}` — the caller's own budget ran out; the
     residual uncertainty is the ordinary timeout contract (execution
     may continue past a caller's deadline).
-  - `{:error, :noprocess}` — the owner (and with it the line) is gone;
-    anything accepted in its last instant died with the line.
+  - `{:error, :noprocess}` — communication with the admission owner
+    failed because the process was unavailable or terminated. This
+    result does not establish whether the submission executed or
+    produced effects before that failure. It is not a definite
+    admission refusal.
   """
   @spec submit(GenServer.name(), Flowex.IP.t(), integer() | nil) ::
           {:ok, pid()}

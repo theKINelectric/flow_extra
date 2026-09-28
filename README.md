@@ -221,7 +221,7 @@ Two `init/1` callbacks run when a pipeline starts, both **in the starting caller
 `init/1` is configuration preparation: it must return a map (module pipes) or a map/keyword list (pipeline), and the result is validated before any topology starts. It is **not** a worker-resource lifecycle callback — use a process-owned mechanism for resources that must be recreated with each worker. Supervisor-driven restarts reuse the prepared options; only a new explicit start runs `init/1` again.
 
 ## Admission and overload
-The asynchronous engine bounds admitted work — queued plus executing packets together — at `admission_capacity` (pipeline option, default 100). A submission either acquires a permit or is refused immediately and observably:
+The asynchronous engine bounds admitted work — queued plus executing packets together — at `admission_capacity` (pipeline option, default 100). A submission acquires a permit, meets a definite refusal (immediately at capacity, or after a bounded settling wait while the pipeline recovers), or — when only its acknowledgment goes missing — returns an unknown outcome the caller can inspect:
 
 ```elixir
 FunPipeline.call(pipeline, %FunPipeline{number: 2})
@@ -231,12 +231,12 @@ FunPipeline.cast(pipeline, %FunPipeline{number: 2})
 # :ok — accepted and accounted for — or {:error, :overloaded}
 ```
 
-`cast/2` returning `:ok` therefore **means the work is admitted**: the work is accounted from there — to a terminal release, or as an unresolved reservation until the pipeline is restarted (`Flowex.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission. What a cast caller can infer from each answer:
+`cast/2` returning `:ok` therefore **means the work is admitted**: the work is accounted from there — to a terminal release, or as an unresolved reservation until the pipeline is restarted (`Flowex.Admission.report/1` exposes the ledger). Permits are held for the work's whole lifetime: a caller's timeout or death releases nothing while execution continues, and the caller's deadline bounds its own wait for admission — with a 25 ms acknowledgment allowance past the budget, so a reply already on its way is still heard before the outcome is reported. What a cast caller can infer from each answer:
 
 - `:ok` — admitted and accounted;
 - `{:error, :overloaded}` / `{:error, :unavailable}` — **definite refusals** (capacity; settling or expired at dequeue): nothing was reserved, nothing of this submission will execute;
 - `{:error, {:unacknowledged, ref}}` — **unknown**, not a refusal: only the acknowledgment timed out, and the submission may have been admitted in the last instant before the reply was lost. Keep the `ref` and check `Flowex.Admission.report/1`'s `:refs` — a live view of *unresolved reservations*, not an admission history: the ref's presence means admitted-and-unresolved; its absence means released-or-never-admitted and does not prove non-admission (a completed job leaves the list);
-- `{:error, :noprocess}` — the pipeline is gone; anything accepted in its last instant died with it.
+- `{:error, :noprocess}` — communication with the admission owner failed because the process was unavailable or terminated. This does not establish whether the submission executed or produced effects before that failure; it is not a definite admission refusal.
 
 `call/3` raises `Flowex.AdmissionError` with the same distinction (`:overloaded`, `:unavailable` definite; `:unacknowledged` uncertain and carrying `request_ref`) or `Flowex.PipelineError` on its own budget. If a worker dies, in-flight calls fail (the consumer's death trips their monitors) while the generation quiesces: work that survives the failure keeps executing and **keeps its capacity** until its own terminal release — the reopened pipeline never double-books a slot under still-running old work — and work destroyed with the failure stays admitted, outcome unknown: never an invented success or failure, recoverable by stopping and restarting the pipeline (a confirmed termination of the whole execution generation). A count bound is not a byte bound — assume normal-sized payloads. The synchronous engine (the single-process debug engine) is deliberately unadmitted: its queue is its GenServer mailbox, which cannot be bounded from inside.
 

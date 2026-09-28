@@ -13,8 +13,11 @@ defmodule Flowex.Client do
   `call/3` raises `Flowex.AdmissionError` the same way, and `cast/2`
   reports the pipeline's own answer — `:ok` from the client means the
   pipeline accepted and accounted the work, a definite refusal arrives
-  as `{:error, :overloaded | :unavailable | :noprocess}`, and an
-  outcome learned only by its acknowledgment timing out arrives as
+  as `{:error, :overloaded | :unavailable}`, a lost admission endpoint
+  arrives as `{:error, :noprocess}` (communication with the admission
+  owner failed; whether the submission executed or produced effects
+  before that failure is not established), and an outcome learned only
+  by its acknowledgment timing out arrives as
   `{:error, {:unacknowledged, ref}}` — uncertain, never spelled as a
   refusal. See `Flowex.Admission.submit/3` for what each shape lets the
   caller infer.
