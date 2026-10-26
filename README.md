@@ -5,12 +5,12 @@
 
 **FlowExtra began as a fork of [Anton Mishchuk's Flowex](https://github.com/antonmi/flowex)** —
 same lineage under a new name and namespace: modules `FlowExtra.*`, package and application
-`flowextra` / `:flowextra`. It is maintained by the Factory from the 2026 revival on
+`flowextra` / `:flowextra`. It is maintained by Kinelectric from the 2026 revival on
 Elixir 1.20.4/OTP 29 — the only runtime actually verified here.
 The package's declared floor (`~> 1.15`) is inherited from upstream and is **not** re-certified
-by this fork yet (see `docs/research/flowex/E-artifact-and-provenance.md`). Lineage: `antonmi/flowex @ 3a9ebae`;
+by this fork yet. Lineage: `antonmi/flowex @ 3a9ebae`;
 fork point: `3ccf92e`. Upstream declared the project unsupported (see ALF); development
-continues here as the Factory's Railway backbone. See [MIGRATION.md](MIGRATION.md) for
+continues here. See [MIGRATION.md](MIGRATION.md) for
 moving code from Flowex to FlowExtra.
 
 **License: Apache-2.0.** The LICENSE file is upstream's own — added by Anton Mishchuk in

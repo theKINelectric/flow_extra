@@ -10,8 +10,7 @@ defmodule FlowExtra.PackageDownstreamTest do
   full from the artifact itself: startup, one successful pipeline, the
   error route (:boom recovered by the error pipe), and a deadline
   (PipelineError :timeout, not a hang). License metadata is pinned
-  separately in `package_test.exs` (Apache-2.0, decided 2026-09-27 — see
-  docs/research/flowex/E-artifact-and-provenance.md).
+  separately in `package_test.exs` (Apache-2.0, decided 2026-09-27).
   """
 
   test "a fresh downstream project formats and runs from the built artifact" do

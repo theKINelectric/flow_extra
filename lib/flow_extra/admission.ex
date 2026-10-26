@@ -22,7 +22,7 @@ defmodule FlowExtra.Admission do
   unresolved reservation — reported `active`, outcome unknown — until
   the pipeline is restarted (retention with manual recovery: stop and
   start again, a confirmed termination of the whole execution
-  generation). See `docs/research/flowex/C-admission-design.md`.
+  generation).
 
   The owner monitors every line worker. Any worker death quiesces the
   generation; because the wrapper supervisor is `:rest_for_one` with the

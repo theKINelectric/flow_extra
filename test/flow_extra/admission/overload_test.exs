@@ -7,8 +7,7 @@ defmodule FlowExtra.Admission.OverloadTest do
   callbacks ever ran — nineteen events silently eaten by GenStage's
   keep-last buffer, the caller still holding :ok for every one of them.
 
-  Astra's C design record (docs/research/flowex/C-admission-design.md) is
-  the contract: a submission either acquires a permit or is refused
+  The admission design is the contract: a submission either acquires a permit or is refused
   observably; permits are held for the work's whole lifetime (a caller's
   timeout releases nothing); every admitted job reaches exactly one
   terminal outcome; any topology failure quiesces its generation —

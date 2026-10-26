@@ -1,6 +1,6 @@
 # Migrating from Flowex to FlowExtra
 
-FlowExtra is the Factory-maintained continuation of Anton Mishchuk's
+FlowExtra is the Kinelectric-maintained continuation of Anton Mishchuk's
 [Flowex](https://github.com/antonmi/flowex) (lineage `antonmi/flowex @ 3a9ebae`,
 fork point `3ccf92e`, revived 2026). The rename is mechanical in code but
 breaking at every binding site; **no compatibility modules are provided** —
